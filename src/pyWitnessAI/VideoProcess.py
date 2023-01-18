@@ -11,7 +11,7 @@ def videoAnalysis(inputVideoFile, referenceImage = '', plot = True) :
         _plt.plot(noDetection)
         _plt.plot(withDetection)
 
-        _plt.fill_between(_np.arange(0, len(withDetection)), 0, 1, noDetection >= 0, alpha=0.5, color='g')
+        _plt.fill_between(_np.arange(0, len(withDetection)), 0, 1, withDetection >= 0, alpha=0.5, color='g')
         _plt.ylim(0,1)
         _plt.xlabel("Frame number")
         _plt.ylabel("Similarity $1-d$")
