@@ -1,0 +1,11 @@
+data
+*.egg
+*.egg-info
+*.jpg
+*.mp4
+*.pkl
+*.pdf
+.idea
+build
+*checkpoint*
+
