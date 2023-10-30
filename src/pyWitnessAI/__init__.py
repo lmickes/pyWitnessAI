@@ -1,2 +1,2 @@
-from Constants import *
-from VideoAnalyzer import *
+from .Constants import *
+from .VideoAnalyzer import *

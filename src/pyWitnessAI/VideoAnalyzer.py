@@ -4,7 +4,7 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 from mtcnn import MTCNN
-from Constants import legend_colors, line_styles
+from .Constants import legend_colors, line_styles
 from keras.models import load_model
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
