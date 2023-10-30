@@ -54,3 +54,4 @@ def processVideoFrameByFrame(inputVideoFile, referenceImage = '', enforceDetecti
             break
 
     return _np.array(dist)
+
