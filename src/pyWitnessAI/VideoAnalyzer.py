@@ -204,6 +204,7 @@ class FrameProcessorCropper:
 
 
 class FrameProcessorMonochrome:
+    @staticmethod
     def process_frame(self, frame):
         #  Convert frame to grayscale
         gray_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
@@ -324,6 +325,7 @@ class FrameAnalyzerMTCNN:
 
         return confidence
 
+    @staticmethod
     def get_face_area(self, faces):
         face_area_sum = sum(face['box'][2] * face['box'][3] for face in faces)
         return face_area_sum
@@ -331,7 +333,7 @@ class FrameAnalyzerMTCNN:
 
 class FrameAnalyzerOpenCV:
     def __init__(self,
-                 cascade_path='E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml'):
+                 cascade_path='./OpenCV_Models/haarcascade_frontalface_alt.xml'):
         self.face_cascade = cv.CascadeClassifier(cascade_path)
 
     def analyze_frame(self, frame):
@@ -345,6 +347,7 @@ class FrameAnalyzerOpenCV:
             'face_area': face_area
         }
 
+    @staticmethod
     def get_face_area(self, faces):
         face_area_sum = sum([w * h for (x, y, w, h) in faces])
         return face_area_sum
@@ -354,13 +357,14 @@ class SimilarityAnalyzer:
     def __init__(self, lineup_images, face_detector="mtcnn"):
         self.face_detector = face_detector
         self.lineup_images = lineup_images  # Pre-processed to a specific size (say, 160x160)
-        self.model_path = 'E:/Project.Pycharm/FaceDetection/Face_detection/Recognition/FACE-DETECT.h5'
+        self.model_path = 'D:/MscPsy/Software/pyWitnessAI/src/pyWitnessAI/FaceNet_Models/FACE-DETECT.h5'
         self.model = load_model(self.model_path)
 
         if self.face_detector == "mtcnn":
             self.detector = MTCNN()
         elif self.face_detector == "opencv":
-            cascade_path = 'E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml'
+            cascade_path = \
+                'D:/MscPsy/Software/pyWitnessAI/src/pyWitnessAI/OpenCV_Models/haarcascade_frontalface_alt.xml'
             self.face_cascade = cv.CascadeClassifier(cascade_path)
 
         # Pre-compute embeddings for the provided lineup images
@@ -403,6 +407,7 @@ class SimilarityAnalyzer:
         embedding = self.model.predict(face_pixels)
         return embedding[0]
 
+    @staticmethod
     def calculate_similarity(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
         dot_product = np.dot(emb1, emb2)
@@ -425,6 +430,7 @@ class LineupLoader:
             self.number = image_number
         self.lineup_images = []
 
+    @staticmethod
     def preprocess_image(self, image, target_size=(160, 160)):
         image = cv.resize(image, target_size)
         return image
