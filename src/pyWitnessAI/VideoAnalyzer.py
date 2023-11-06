@@ -325,7 +325,6 @@ class FrameAnalyzerMTCNN:
 
         return confidence
 
-    @staticmethod
     def get_face_area(self, faces):
         face_area_sum = sum(face['box'][2] * face['box'][3] for face in faces)
         return face_area_sum
@@ -347,7 +346,6 @@ class FrameAnalyzerOpenCV:
             'face_area': face_area
         }
 
-    @staticmethod
     def get_face_area(self, faces):
         face_area_sum = sum([w * h for (x, y, w, h) in faces])
         return face_area_sum
@@ -407,7 +405,6 @@ class SimilarityAnalyzer:
         embedding = self.model.predict(face_pixels)
         return embedding[0]
 
-    @staticmethod
     def calculate_similarity(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
         dot_product = np.dot(emb1, emb2)
@@ -430,7 +427,6 @@ class LineupLoader:
             self.number = image_number
         self.lineup_images = []
 
-    @staticmethod
     def preprocess_image(self, image, target_size=(160, 160)):
         image = cv.resize(image, target_size)
         return image
