@@ -369,8 +369,8 @@ class SimilarityAnalyzer:
         self.lineup_embeddings = [self.get_embedding(image) for image in self.lineup_images]
 
     def analyze_frame(self, frame):
-        if self.face_detector == "mtcnn":
-            faces = self.detector.detect_faces(frame)
+        # if self.face_detector == "mtcnn":    # If there are more face detectors
+        faces = self.detector.detect_faces(frame)
         # extract detected face regions
         face_images = [frame[y:y + h, x:x + w]
                        for (x, y, w, h) in [face['box'] for face in faces]]
