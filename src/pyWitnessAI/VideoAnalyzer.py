@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from mtcnn import MTCNN
 from .Constants import legend_colors, line_styles
 from keras.models import load_model
+from importlib.resources import files
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
 
@@ -332,7 +333,7 @@ class FrameAnalyzerMTCNN:
 
 class FrameAnalyzerOpenCV:
     def __init__(self,
-                 cascade_path='./OpenCV_Models/haarcascade_frontalface_alt.xml'):
+                 cascade_path=str(files("pyWitnessAI.OpenCV_Models").joinpath("haarcascade_frontalface_alt.xml"))):
         self.face_cascade = cv.CascadeClassifier(cascade_path)
 
     def analyze_frame(self, frame):
@@ -355,14 +356,14 @@ class SimilarityAnalyzer:
     def __init__(self, lineup_images, face_detector="mtcnn"):
         self.face_detector = face_detector
         self.lineup_images = lineup_images  # Pre-processed to a specific size (say, 160x160)
-        self.model_path = 'D:/MscPsy/Software/pyWitnessAI/src/pyWitnessAI/FaceNet_Models/FACE-DETECT.h5'
+        self.model_path = str(files("pyWitnessAI.FaceNet_Models").joinpath("FACE_DETECT.h5"))
         self.model = load_model(self.model_path)
 
         if self.face_detector == "mtcnn":
             self.detector = MTCNN()
         elif self.face_detector == "opencv":
             cascade_path = \
-                'D:/MscPsy/Software/pyWitnessAI/src/pyWitnessAI/OpenCV_Models/haarcascade_frontalface_alt.xml'
+                str(files("pyWitnessAI.OpenCV_Models").joinpath("haarcascade_frontalface_alt.xml"))
             self.face_cascade = cv.CascadeClassifier(cascade_path)
 
         # Pre-compute embeddings for the provided lineup images
