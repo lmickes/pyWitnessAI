@@ -7,6 +7,7 @@ from mtcnn import MTCNN
 from .Constants import legend_colors, line_styles
 from keras.models import load_model
 from importlib.resources import files
+from .DataFlattener import *
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
 
@@ -186,6 +187,38 @@ class VideoAnalyzer:
                 data[f'{analyzer_name}_length'] = [len(entry) if isinstance(entry, list) else None for entry in
                                                    results_list]
 
+        df = pd.DataFrame(data)
+        df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
+
+    def save_data_flattened(self, directory='results', prefix='analyzed'):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        # Prepare the basic data with frame count and average pixel values
+        data = {
+            'frame': self.frame_count,
+            'avg_pixel_value': self.average_pixel_values
+        }
+
+        # Process the analyzed data to flatten out the keys and corresponding data
+        for analyzer_name, results_list in self.frame_analyzer_output.items():
+            # Flatten the data and keys for each analyzer's output
+            if results_list:
+                flat_keys = flatten_keys(results_list[0])   # Get keys from the first item
+            else:
+                flat_keys = []
+            flat_data = [flatten_data(result) for result in results_list]
+
+            # Flat_data is assumed to be a list of lists, and flat_keys a list of strings
+            for i, key in enumerate(flat_keys):
+                # Create a new key for each flattened key
+                new_key = f"{analyzer_name}_{key}"
+                data[new_key] = []  # Initialize the list for this key
+                for frame_data in flat_data:
+                    if frame_data:  # Check if frame_data is not empty
+                        data[new_key].append(frame_data[i])
+
+        # Convert to DataFrame and save to CSV
         df = pd.DataFrame(data)
         df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
