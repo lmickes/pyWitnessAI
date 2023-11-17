@@ -202,21 +202,14 @@ class VideoAnalyzer:
 
         # Process the analyzed data to flatten out the keys and corresponding data
         for analyzer_name, results_list in self.frame_analyzer_output.items():
-            # Flatten the data and keys for each analyzer's output
-            if results_list:
-                flat_keys = flatten_keys(results_list[0])   # Get keys from the first item
-            else:
-                flat_keys = []
+            # Get keys from the first item
+            flat_keys = flatten_keys(results_list[0]) if results_list else []
             flat_data = [flatten_data(result) for result in results_list]
 
             # Flat_data is assumed to be a list of lists, and flat_keys a list of strings
             for i, key in enumerate(flat_keys):
-                # Create a new key for each flattened key
-                new_key = f"{analyzer_name}_{key}"
-                data[new_key] = []  # Initialize the list for this key
-                for frame_data in flat_data:
-                    if frame_data:  # Check if frame_data is not empty
-                        data[new_key].append(frame_data[i])
+                # Extract the same index from each frame's flattened data
+                data[f"{analyzer_name}_{key}"] = [frame_data[i] for frame_data in flat_data if frame_data]
 
         # Convert to DataFrame and save to CSV
         df = pd.DataFrame(data)
