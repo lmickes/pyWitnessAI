@@ -356,7 +356,7 @@ class SimilarityAnalyzer:
     def __init__(self, lineup_images, face_detector="mtcnn"):
         self.face_detector = face_detector
         self.lineup_images = lineup_images  # Pre-processed to a specific size (say, 160x160)
-        self.model_path = str(files("pyWitnessAI.FaceNet_Models").joinpath("FACE_DETECT.h5"))
+        self.model_path = str(files("pyWitnessAI.FaceNet_Models").joinpath("FACE-DETECT.h5"))
         self.model = load_model(self.model_path)
 
         if self.face_detector == "mtcnn":
