@@ -28,13 +28,13 @@ class VideoAnalyzer:
         self.frame_analyzed = 0
         self.frame_total = 0
 
-    def add_analyzer(self, name, analyzer):
+    def add_analyzer(self, analyzer):
         #  Add an external frame analyzer
-        self.frame_analyzer[name] = analyzer
-        self.frame_analyzer_output[name] = []
+        self.frame_analyzer[analyzer.name] = analyzer
+        self.frame_analyzer_output[analyzer.name] = []
 
-    def add_processor(self, name, processor):
-        self.frame_processor[name] = processor
+    def add_processor(self, processor):
+        self.frame_processor[processor.name] = processor
 
     def release_resources(self):
         self.cap.release()
@@ -201,26 +201,28 @@ class VideoAnalyzer:
         }
 
         # Initialize a set to keep track of all keys
-        all_keys = set()
+        all_keys = {}
 
-        # Process each analyzer's output
+        # Find all the keys
         for analyzer_name, results_list in self.frame_analyzer_output.items():
             # Flatten each entry in the results list
             for result in results_list:
                 flattened_keys = flatten_keys(result)
-                flattened_values = flatten_data(result)
-                for key, value in zip(flattened_keys, flattened_values):
-                    full_key = f"{analyzer_name}_{key}"
-                    if full_key not in data:
-                        data[full_key] = []
-                    data[full_key].append(value)
-                    all_keys.add(full_key)
+                for key in flattened_keys:
+                    all_keys[key] = []
 
-        # Ensure all lists in data have the same length
-        max_length = max(len(v) for v in data.values())
-        for key in all_keys:
-            if len(data[key]) < max_length:
-                data[key].extend([None] * (max_length - len(data[key])))
+        # Match data with the corresponding keys
+        for analyzer_name, results_list in self.frame_analyzer_output.items():
+            for result in results_list:
+                flattened_keys = flatten_keys(result)
+                flattened_values = flatten_data(result)
+                for key in all_keys:
+                    if key in flattened_keys:
+                        all_keys[key].append(flattened_values[flattened_keys.index(key)])
+                    else:
+                        all_keys[key].append(0)
+
+        #
 
         # Create a DataFrame and save to CSV
         df = pd.DataFrame(data)
@@ -228,11 +230,12 @@ class VideoAnalyzer:
 
 
 class FrameProcessorCropper:
-    def __init__(self, x1, x2, y1, y2):
+    def __init__(self, x1, x2, y1, y2, name='cropper'):
         self.x1 = x1
         self.x2 = x2
         self.y1 = y1
         self.y2 = y2
+        self.name = name
 
     def process_frame(self, frame):
         #  Crop the frame using the provided coordinates
@@ -242,7 +245,9 @@ class FrameProcessorCropper:
 
 
 class FrameProcessorMonochrome:
-    @staticmethod
+    def __init__(self, name='monochrome'):
+        self.name = name
+
     def process_frame(self, frame):
         #  Convert frame to grayscale
         gray_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
@@ -254,9 +259,10 @@ class FrameProcessorMonochrome:
 
 
 class FrameProcessorNormalizer:
-    def __init__(self, set_min, set_max):
+    def __init__(self, set_min, set_max, name='normalizer'):
         self.set_min = set_min
         self.set_max = set_max
+        self.name = name
 
     def process_frame(self, frame):
         frame_min = frame.min()
@@ -281,9 +287,10 @@ class FrameProcessorNormalizer:
 
 
 class FrameProcessorRemover:
-    def __init__(self, boxes):
+    def __init__(self, boxes, name='remover'):
         self.boxes = boxes  # Each box is a tuple (x1, x2, y1, y2)
         self.color_gray = (128, 128, 128)
+        self.name = name
 
     def process_frame(self, frame):
         # Replace specified rectangular area with gray color
@@ -302,9 +309,10 @@ class FrameProcessorRemover:
 
 
 class FrameProcessorVideoWriter:
-    def __init__(self, output_path):
+    def __init__(self, output_path, name='video_writer'):
         self.output_path = output_path
         self.out_video_writer = None
+        self.name = name
 
     def process_frame(self, frame):
         if self.out_video_writer is None:
@@ -324,9 +332,10 @@ class FrameProcessorVideoWriter:
 
 
 class FrameProcessorDisplayer:
-    def __init__(self, window_name='processed Video'):
+    def __init__(self, window_name='processed Video', name='displayer'):
         self.window_name = window_name
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
+        self.name = name
 
     def process_video(self, frame):
         cv.imshow(self.window_name, frame)
@@ -340,8 +349,9 @@ class FrameProcessorDisplayer:
 
 
 class FrameAnalyzerMTCNN:
-    def __init__(self):
+    def __init__(self, name="mtcnn"):
         self.detector = MTCNN()
+        self.name = name
 
     def analyze_frame(self, frame):
         faces = self.detector.detect_faces(frame)
@@ -350,9 +360,9 @@ class FrameAnalyzerMTCNN:
         face_area = self.get_face_area(faces)
 
         return {
-            'confidence': confidence,
-            'face_count': face_count,
-            'face_area': face_area
+            f'{self.name}_face_count': face_count,
+            f'{self.name}_face_area': face_area,
+            f'{self.name}_confidence': confidence
         }
 
     def get_confidence(self, faces):
@@ -370,8 +380,10 @@ class FrameAnalyzerMTCNN:
 
 class FrameAnalyzerOpenCV:
     def __init__(self,
-                 cascade_path=str(files("pyWitnessAI.OpenCV_Models").joinpath("haarcascade_frontalface_alt.xml"))):
+                 cascade_path=str(files("pyWitnessAI.OpenCV_Models").joinpath("haarcascade_frontalface_alt.xml")),
+                 name='opencv'):
         self.face_cascade = cv.CascadeClassifier(cascade_path)
+        self.name = name
 
     def analyze_frame(self, frame):
         gray_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
@@ -380,8 +392,8 @@ class FrameAnalyzerOpenCV:
         face_area = self.get_face_area(faces)
 
         return {
-            'face_count': face_count,
-            'face_area': face_area
+            f'{self.name}_face_count': face_count,
+            f'{self.name}_face_area': face_area
         }
 
     def get_face_area(self, faces):
@@ -390,11 +402,12 @@ class FrameAnalyzerOpenCV:
 
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_images, face_detector="mtcnn"):
+    def __init__(self, lineup_images, face_detector="mtcnn", name='similarity'):
         self.face_detector = face_detector
         self.lineup_images = lineup_images  # Pre-processed to a specific size (say, 160x160)
         self.model_path = str(files("pyWitnessAI.FaceNet_Models").joinpath("FACE-DETECT.h5"))
         self.model = load_model(self.model_path)
+        self.name = name
 
         if self.face_detector == "mtcnn":
             self.detector = MTCNN()
@@ -422,9 +435,9 @@ class SimilarityAnalyzer:
             similarities = [self.calculate_similarity(frame_emb, lineup_emb)
                             for lineup_emb in self.lineup_embeddings]
             similarity_values.append(similarities)
-            print(f"similarities: {similarity_values}")
+            # print(f"similarities: {similarity_values}")
 
-        return {"similarities": similarity_values}
+        return {f'{self.name}_values': similarity_values}
 
     def get_embedding(self, face_pixels):
         # Ensure image is of the right size
