@@ -86,7 +86,7 @@ class VideoAnalyzer:
             'frame_total': self.frame_total
         }
 
-    def run(self, frame_start, frame_end):
+    def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
     def plot_face_counts(self):
@@ -137,7 +137,7 @@ class VideoAnalyzer:
         plt.plot(self.frame_count, self.average_pixel_values, color=legend_colors['general'])
         plt.axhline(y=self.average_value, color=legend_colors['mean'], linestyle='--', label='Average value')
         plt.xlabel('Frame')
-        plt.ylim(81, 196)
+        plt.ylim(self.average_value-50, self.average_value+50)
         plt.ylabel('Average pixel value')
         plt.title('Pixel Intensity Trend across the Video')
         plt.legend()
@@ -190,7 +190,7 @@ class VideoAnalyzer:
         df = pd.DataFrame(data)
         df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
-    def save_data_flattened(self, directory='results', prefix='analyzed'):
+    def save_data_flattened(self, directory='results', prefix='analyzed_flattened'):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
@@ -200,20 +200,31 @@ class VideoAnalyzer:
             'avg_pixel_value': self.average_pixel_values
         }
 
-        # Process the analyzed data to flatten out the keys and corresponding data
+        # Initialize a set to keep track of all keys
+        all_keys = set()
+
+        # Process each analyzer's output
         for analyzer_name, results_list in self.frame_analyzer_output.items():
-            # Get keys from the first item
-            flat_keys = flatten_keys(results_list[0]) if results_list else []
-            flat_data = [flatten_data(result) for result in results_list]
+            # Flatten each entry in the results list
+            for result in results_list:
+                flattened_keys = flatten_keys(result)
+                flattened_values = flatten_data(result)
+                for key, value in zip(flattened_keys, flattened_values):
+                    full_key = f"{analyzer_name}_{key}"
+                    if full_key not in data:
+                        data[full_key] = []
+                    data[full_key].append(value)
+                    all_keys.add(full_key)
 
-            # Flat_data is assumed to be a list of lists, and flat_keys a list of strings
-            for i, key in enumerate(flat_keys):
-                # Extract the same index from each frame's flattened data
-                data[f"{analyzer_name}_{key}"] = [frame_data[i] for frame_data in flat_data if frame_data]
+        # Ensure all lists in data have the same length
+        max_length = max(len(v) for v in data.values())
+        for key in all_keys:
+            if len(data[key]) < max_length:
+                data[key].extend([None] * (max_length - len(data[key])))
 
-        # Convert to DataFrame and save to CSV
+        # Create a DataFrame and save to CSV
         df = pd.DataFrame(data)
-        df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
+        df.to_csv(os.path.join(directory, f'{prefix}_data_flattened.csv'), index=False)
 
 
 class FrameProcessorCropper:
