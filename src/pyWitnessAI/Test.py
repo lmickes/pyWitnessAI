@@ -10,8 +10,8 @@ def test():
 
     mtcnn_analyzer = FrameAnalyzerMTCNN()
     opencv_analyzer = FrameAnalyzerOpenCV()
-    analyzer.add_analyzer("mtcnn", mtcnn_analyzer)
-    analyzer.add_analyzer("opencv", opencv_analyzer)
+    analyzer.add_analyzer(mtcnn_analyzer)
+    analyzer.add_analyzer(opencv_analyzer)
 
     #  Load the lineup
     lineup_loader = LineupLoader(
@@ -21,13 +21,13 @@ def test():
 
     #  Comparison of lineup faces with faces in the video
     similarity_analyzer = SimilarityAnalyzer(lineup_images=lineup, face_detector="mtcnn")
-    analyzer.add_analyzer("lineup", similarity_analyzer)
+    analyzer.add_analyzer(similarity_analyzer)
 
-    analyzer.run(0, 20)
+    analyzer.run(0, 10)
 
     print(analyzer.get_analysis_info())
 
-    analyzer.save_data()
+    analyzer.save_data_flattened()
 
     plt.figure(figsize=(9, 6))
     plt.suptitle("Video analysis", fontsize=24, fontweight='bold')
