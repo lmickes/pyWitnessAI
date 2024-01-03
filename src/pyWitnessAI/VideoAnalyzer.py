@@ -194,39 +194,53 @@ class VideoAnalyzer:
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        # Prepare the basic data with frame count and average pixel values
-        data = {
-            'frame': self.frame_count,
-            'avg_pixel_value': self.average_pixel_values
-        }
+        #  Initialize data structures for flattened data
+        flattened_data = []
+        #  Iterate through each frame's analyzed output
+        for i, frame in enumerate(self.frame_count):
+            #  Initialize a dictionary for each frame
+            frame_data = {'frame': frame}
 
-        # Initialize a set to keep track of all keys
-        all_keys = {}
+            #  Flatten and merge all analyzer data into frame_data
+            for analyzer_name, results_list in self.frame_analyzer_output.items():
+                result = results_list[i]  # Get the result for the current frame
+                flat_result = flatten_data(result)  # Flatten the result
+                flat_keys = flatten_keys(result)  # Flatten the keys
 
-        # Find all the keys
-        for analyzer_name, results_list in self.frame_analyzer_output.items():
-            # Flatten each entry in the results list
-            for result in results_list:
-                flattened_keys = flatten_keys(result)
-                for key in flattened_keys:
-                    all_keys[key] = []
+                # Pair flattened keys and values, then merge into frame_data
+                for key, value in zip(flat_keys, flat_result):
+                    frame_data[f"{analyzer_name}_{key}"] = value
 
-        # Match data with the corresponding keys
-        for analyzer_name, results_list in self.frame_analyzer_output.items():
-            for result in results_list:
-                flattened_keys = flatten_keys(result)
-                flattened_values = flatten_data(result)
-                for key in all_keys:
-                    if key in flattened_keys:
-                        all_keys[key].append(flattened_values[flattened_keys.index(key)])
-                    else:
-                        all_keys[key].append(0)
+            #  Add the average pixel value for the frame
+            frame_data['avg_pixel_value'] = self.average_pixel_values[i]
 
-        #
+            #  Append the frame data to the flattened data list
+            flattened_data.append(frame_data)
 
-        # Create a DataFrame and save to CSV
-        df = pd.DataFrame(data)
-        df.to_csv(os.path.join(directory, f'{prefix}_data_flattened.csv'), index=False)
+        #  Create a DataFrame from the flattened data
+        df = pd.DataFrame(flattened_data)
+
+        #  Define a preferred column order
+        preferred_order = ['frame', 'avg_pixel_value']
+        analyzer_keys = set()
+
+        #  Collect keys for each analyzer type, assuming they start with the analyzer's name
+        for column in df.columns:
+            if column.startswith(tuple(self.frame_analyzer.keys())):  # Assuming analyzer keys are known
+                analyzer_keys.add(column.split('_')[0])  # Get the analyzer name prefix
+
+        #  Add analyzer data to preferred order, grouped by analyzer
+        for analyzer in analyzer_keys:
+            preferred_order.extend([col for col in df.columns if col.startswith(analyzer)])
+
+        #  Ensure all columns are included by adding any remaining columns at the end
+        remaining_columns = [col for col in df.columns if col not in preferred_order]
+        preferred_order.extend(remaining_columns)
+
+        #  Reorder the DataFrame according to the preferred order
+        df = df[preferred_order]
+
+        df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
 
 class FrameProcessorCropper:
