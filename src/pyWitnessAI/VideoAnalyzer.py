@@ -226,7 +226,7 @@ class VideoAnalyzer:
 
         #  Collect keys for each analyzer type, assuming they start with the analyzer's name
         for column in df.columns:
-            if column.startswith(tuple(self.frame_analyzer.keys())):  # Assuming analyzer keys are known
+            if column.startswith(tuple(self.frame_analyzer.keys())):
                 analyzer_keys.add(column.split('_')[0])  # Get the analyzer name prefix
 
         #  Add analyzer data to preferred order, grouped by analyzer
@@ -374,9 +374,10 @@ class FrameAnalyzerMTCNN:
         face_area = self.get_face_area(faces)
 
         return {
-            f'{self.name}_face_count': face_count,
-            f'{self.name}_face_area': face_area,
-            f'{self.name}_confidence': confidence
+            # f'{self.name}_face_count': face_count,
+            f'face_count': face_count,
+            f'face_area': face_area,
+            f'confidence': confidence
         }
 
     def get_confidence(self, faces):
@@ -406,8 +407,8 @@ class FrameAnalyzerOpenCV:
         face_area = self.get_face_area(faces)
 
         return {
-            f'{self.name}_face_count': face_count,
-            f'{self.name}_face_area': face_area
+            f'face_count': face_count,
+            f'face_area': face_area
         }
 
     def get_face_area(self, faces):
@@ -451,7 +452,7 @@ class SimilarityAnalyzer:
             similarity_values.append(similarities)
             # print(f"similarities: {similarity_values}")
 
-        return {f'{self.name}_values': similarity_values}
+        return {f'facenet_euclidean': similarity_values}
 
     def get_embedding(self, face_pixels):
         # Ensure image is of the right size
