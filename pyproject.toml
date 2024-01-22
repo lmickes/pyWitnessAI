@@ -10,7 +10,8 @@ dependencies = [
     "deepface",
     "numpy",
     "matplotlib",
-    "ipython"
+    "ipython",
+    "cv"
 ]
 
 [project.optional-dependencies]
@@ -22,10 +23,16 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]  # list of folders that contain the packages (["."] by default)
 include = ["pyWitnessAI"]  # package names should match these glob patterns (["*"] by default)
+# include = ["DataFlattener"]
 
 [project.scripts]
 pyWitnessAI = "pyWitnessAI:main"
+
+[tool.setuptools.package-data]
+"pyWitnessAI.FaceNet_Model" = ["src/pyWitnessAI/FaceNet_Model/FACE-DETECT.h5"]
+"pyWitnessAI.OpenCV_Models" = ["src/pyWitnessAI/OpenCV_Models/*.xml"]
