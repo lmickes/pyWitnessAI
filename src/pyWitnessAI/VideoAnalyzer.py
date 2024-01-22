@@ -377,12 +377,14 @@ class FrameAnalyzerMTCNN:
         confidence = self.get_confidence(faces)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
+        coordinates = self.get_face_coordinates(faces)
 
         return {
             # f'{self.name}_face_count': face_count,
             f'face_count': face_count,
             f'face_area': face_area,
-            f'confidence': confidence
+            f'confidence': confidence,
+            f'coordinates': coordinates
         }
 
     def get_confidence(self, faces):
@@ -396,6 +398,14 @@ class FrameAnalyzerMTCNN:
     def get_face_area(self, faces):
         face_area_sum = sum(face['box'][2] * face['box'][3] for face in faces)
         return face_area_sum
+
+    def get_face_coordinates(self, faces):
+        coordinates = []
+
+        for face in faces:
+            coordinates.append(face['box'])
+
+        return coordinates
 
 
 class FrameAnalyzerOpenCV:
