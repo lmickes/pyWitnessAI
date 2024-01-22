@@ -8,6 +8,10 @@ from .Constants import legend_colors, line_styles
 from keras.models import load_model
 from importlib.resources import files
 from .DataFlattener import *
+from PIL import Image
+from deepface import DeepFace
+import dlib
+from deepface.commons import functions
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
 
@@ -236,6 +240,7 @@ class VideoAnalyzer:
         #  Ensure all columns are included by adding any remaining columns at the end
         remaining_columns = [col for col in df.columns if col not in preferred_order]
         preferred_order.extend(remaining_columns)
+        # preferred_order[2:] = preferred_order[2:][::-1]  # Reverse the results of analyzers
 
         #  Reorder the DataFrame according to the preferred order
         df = df[preferred_order]
@@ -417,59 +422,121 @@ class FrameAnalyzerOpenCV:
 
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_images, face_detector="mtcnn", name='similarity'):
-        self.face_detector = face_detector
-        self.lineup_images = lineup_images  # Pre-processed to a specific size (say, 160x160)
-        self.model_path = str(files("pyWitnessAI.FaceNet_Models").joinpath("FACE-DETECT.h5"))
-        self.model = load_model(self.model_path)
+    def __init__(self, lineup_faces, detector_backend='mtcnn', model_name='Facenet', name='similarity'):
+        #  Similarity calculation highly rely on deepface
         self.name = name
+        self.lineup_faces = lineup_faces
+        self.detector_backend = detector_backend
+        self.model_name = model_name
+        #  Initialize the face detector
+        if self.detector_backend == 'mtcnn':
+            self.face_detector = MTCNN()
+        elif self.detector_backend == 'opencv':
+            self.face_detector = cv.CascadeClassifier(cv.data.haarcascades + "haarcascade_frontalface_default.xml")
+        elif self.detector_backend == 'dlib':
+            self.face_detector = dlib.get_frontal_face_detector()
+        else:
+            raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
 
-        if self.face_detector == "mtcnn":
-            self.detector = MTCNN()
-        elif self.face_detector == "opencv":
-            cascade_path = \
-                str(files("pyWitnessAI.OpenCV_Models").joinpath("haarcascade_frontalface_alt.xml"))
-            self.face_cascade = cv.CascadeClassifier(cascade_path)
+        # #  Calculate similarity step by step
+        # self.model = load_model(model_name)
+        # #  Get embeddings from lineup
+        # self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
 
-        # Pre-compute embeddings for the provided lineup images
-        self.lineup_embeddings = [self.get_embedding(image) for image in self.lineup_images]
+    def preprocess_image(self, image_np):
+        #  Check if the image is in PIL format, convert to numpy array if so
+        if isinstance(image_np, Image.Image):
+            image_np = np.array(image_np)
+
+        #  Ensure image has 3 color channels (RGB)
+        if image_np.shape[2] == 4:  # If the image has 4 x`channels (RGBA)
+            image_np = image_np[:, :, :3]  # Drop the alpha channel
+
+        #  Resize the image to 160x160 pixels using OpenCV
+        resized_image = cv.resize(image_np, (160, 160))
+
+        # Convert color from RGB to BGR
+        resized_image = resized_image[:, :, ::-1]
+        return resized_image
+
+    def detect_faces_in_frame(self, frame):
+        if self.detector_backend == 'mtcnn':
+            return self.detect_faces_mtcnn(frame)
+        elif self.detector_backend == 'opencv':
+            return self.detect_faces_opencv(frame)
+        elif self.detector_backend == 'dlib':
+            return self.detect_faces_dlib(frame)
+
+    def detect_faces_mtcnn(self, frame):
+        faces = self.face_detector.detect_faces(frame)
+        face_images = [frame[face['box'][1]:face['box'][1] + face['box'][3], face['box'][0]:face['box'][0] + face['box'][2]] for face in faces]
+        return face_images
+
+    def detect_faces_opencv(self, frame):
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        faces = self.face_detector.detectMultiScale(gray, 1.1, 4)
+        face_images = [frame[y:y+h, x:x+w] for (x, y, w, h) in faces]
+        return face_images
+
+    def detect_faces_dlib(self, frame):
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        faces = self.face_detector(gray)
+        face_images = [frame[face.top():face.bottom(), face.left():face.right()] for face in faces]
+        return face_images
 
     def analyze_frame(self, frame):
-        # if self.face_detector == "mtcnn":    # If there are more face detectors
-        faces = self.detector.detect_faces(frame)
-        # extract detected face regions
-        face_images = [frame[y:y + h, x:x + w]
-                       for (x, y, w, h) in [face['box'] for face in faces]]
+        frame_results = []
+        detected_faces = self.detect_faces_in_frame(frame)
 
-        # compute embeddings for each detected face in the frame
-        frame_embeddings = [self.get_embedding(face) for face in face_images]
+        for detected_face in detected_faces:
+            detected_face_np = self.preprocess_image(detected_face)
+            face_comparisons = []
 
-        # compute similarity values
+            for lineup_face in self.lineup_faces:
+                lineup_face_np = self.preprocess_image(lineup_face)
+                try:
+                    result = DeepFace.verify(detected_face_np, lineup_face_np,
+                                             model_name=self.model_name, detector_backend=self.detector_backend)
+                    similarity_score = result['distance']
+                    face_comparisons.append(similarity_score)
+                except ValueError as e:
+                    print(f"Warning: {e}")
+                    face_comparisons.append(None)  # Append None or some indicator of failed detection
+
+            frame_results.append(face_comparisons)
+
+        # return frame_results
+        return {
+            'facenet_distance': frame_results
+        }
+
+    def compare_embeddings(self, detected_faces):
+        # # Detect faces using MTCNN detector
+        # faces = DeepFace.detectFace(frame, detector_backend=self.face_detector, enforce_detection=False)
+
+        #  Get faces from the result of analyzers
+        # for detected_faces in detected
+        # Compute embeddings for each detected face in the frame
+        frame_embeddings = [self.get_embedding(face) for face in faces]
+
+        # Compute similarity values
         similarity_values = []
         for frame_emb in frame_embeddings:
             similarities = [self.calculate_similarity(frame_emb, lineup_emb)
                             for lineup_emb in self.lineup_embeddings]
             similarity_values.append(similarities)
-            # print(f"similarities: {similarity_values}")
 
-        return {f'facenet_euclidean': similarity_values}
+        return {'facenet_cosine': similarity_values}
 
-    def get_embedding(self, face_pixels):
-        # Ensure image is of the right size
-        face_pixels = cv.resize(face_pixels, (100, 100))  # Assuming 160x160 is the expected input size
-        # Convert RGB image to grayscale
-        face_pixels = cv.cvtColor(face_pixels, cv.COLOR_BGR2GRAY)
-        # Convert pixel values to float (if using normalization)
-        face_pixels = face_pixels.astype('float32')
-        # Possibly normalize pixel values (e.g., mean-center and scale)
-        mean, std = face_pixels.mean(), face_pixels.std()
-        face_pixels = (face_pixels - mean) / std
-        # Expand dimensions to one sample and add channel dimension
-        face_pixels = np.expand_dims(face_pixels, axis=0)
-        face_pixels = np.expand_dims(face_pixels, axis=-1)  # Adding channel dimension
-        # Predict using the FaceNet model
-        embedding = self.model.predict(face_pixels)
-        return embedding[0]
+    def get_embedding(self, face):
+
+        face = cv.resize(face, (160,160))
+        # face = functions.preprocess_face(face, target_size=(160,160), grayscale=False,
+        #                                  enforce_detection=False, detector_backend='opencv')[0]
+        # # Generate embedding using FaceNet
+        embedding = DeepFace.represent(face, model_name='Facenet', enforce_detection=False)
+        return np.array(embedding)
+
 
     def calculate_similarity(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
