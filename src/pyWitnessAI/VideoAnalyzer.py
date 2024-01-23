@@ -448,10 +448,10 @@ class SimilarityAnalyzer:
         else:
             raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
 
-        # #  Calculate similarity step by step
-        # self.model = load_model(model_name)
-        # #  Get embeddings from lineup
-        # self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
+        #  Calculate similarity step by step
+        self.model = load_model(model_name)
+        #  Get embeddings from lineup
+        self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
 
     def preprocess_image(self, image_np):
         #  Check if the image is in PIL format, convert to numpy array if so
@@ -520,9 +520,9 @@ class SimilarityAnalyzer:
             'facenet_distance': frame_results
         }
 
-    def compare_embeddings(self, detected_faces):
+    def compare_embeddings(self, frame):
         # # Detect faces using MTCNN detector
-        # faces = DeepFace.detectFace(frame, detector_backend=self.face_detector, enforce_detection=False)
+        faces = DeepFace.detectFace(frame, detector_backend=self.face_detector, enforce_detection=False)
 
         #  Get faces from the result of analyzers
         # for detected_faces in detected
@@ -540,7 +540,7 @@ class SimilarityAnalyzer:
 
     def get_embedding(self, face):
 
-        face = cv.resize(face, (160,160))
+        # face = cv.resize(face, (160,160))
         # face = functions.preprocess_face(face, target_size=(160,160), grayscale=False,
         #                                  enforce_detection=False, detector_backend='opencv')[0]
         # # Generate embedding using FaceNet
