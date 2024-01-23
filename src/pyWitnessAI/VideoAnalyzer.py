@@ -420,15 +420,23 @@ class FrameAnalyzerOpenCV:
         faces = self.face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
+        face_coordinates = self.get_face_coordinates(faces)
 
         return {
             f'face_count': face_count,
-            f'face_area': face_area
+            f'face_area': face_area,
+            f'coordinate': face_coordinates
         }
 
     def get_face_area(self, faces):
         face_area_sum = sum([w * h for (x, y, w, h) in faces])
         return face_area_sum
+
+    def get_face_coordinates(self, faces):
+        coordinates = []
+        for (x, y, w, h) in faces:
+            coordinates.append([x, y, w, h])
+        return coordinates
 
 
 class SimilarityAnalyzer:
