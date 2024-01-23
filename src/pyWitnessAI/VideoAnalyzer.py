@@ -434,7 +434,7 @@ class FrameAnalyzerOpenCV:
         return {
             f'face_count': face_count,
             f'face_area': face_area,
-            f'face_coordinates': face_coordinates
+            f'coordinates': face_coordinates
         }
 
     def get_face_area(self, faces):
