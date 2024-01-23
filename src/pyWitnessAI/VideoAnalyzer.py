@@ -371,9 +371,18 @@ class FrameAnalyzerMTCNN:
     def __init__(self, name="mtcnn"):
         self.detector = MTCNN()
         self.name = name
+        #  Store detected faces as well as coordinates for transfer
+        self.detected_faces = []
 
     def analyze_frame(self, frame):
         faces = self.detector.detect_faces(frame)
+
+        #  Faces and coordinates transfer
+        self.detected_faces.append({
+            'coordinates': [face['box'] for face in faces],
+            'images': [frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]] for box in faces['box']]
+        })
+
         confidence = self.get_confidence(faces)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
@@ -432,10 +441,11 @@ class FrameAnalyzerOpenCV:
 
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_faces, detector_backend='mtcnn', model_name='Facenet', name='similarity'):
+    def __init__(self, lineup_faces, detected_faces=None, detector_backend='mtcnn', model_name='Facenet', name='similarity'):
         #  Similarity calculation highly rely on deepface
         self.name = name
         self.lineup_faces = lineup_faces
+        self.detected_faces = detected_faces
         self.detector_backend = detector_backend
         self.model_name = model_name
         #  Initialize the face detector
