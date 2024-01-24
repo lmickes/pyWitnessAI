@@ -378,10 +378,12 @@ class FrameAnalyzerMTCNN:
         faces = self.detector.detect_faces(frame)
 
         #  Faces and coordinates transfer
-        self.detected_faces.append({
+        self.detected_faces = {
             'coordinates': [face['box'] for face in faces],
-            'images': [frame[box[1]:box[1] + box[3], box[0]:box[0] + box[2]] for box in faces['box']]
-        })
+            'images': [frame[face['box'][1]:face['box'][1] + face['box'][3],
+                             face['box'][0]:face['box'][0] + face['box'][2]]
+                       for face in faces]
+        }
 
         confidence = self.get_confidence(faces)
         face_count = len(faces)
@@ -449,11 +451,15 @@ class FrameAnalyzerOpenCV:
 
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_faces, detected_faces=None, detector_backend='mtcnn', model_name='Facenet', name='similarity'):
+    def __init__(self, lineup_faces, detected_faces=None,
+                 detector_backend='mtcnn', model_name='Facenet', name='similarity'):
         #  Similarity calculation highly rely on deepface
         self.name = name
         self.lineup_faces = lineup_faces
+
+        #  Face detected from FrameAnalyzer used
         self.detected_faces = detected_faces
+
         self.detector_backend = detector_backend
         self.model_name = model_name
         #  Initialize the face detector
@@ -467,9 +473,9 @@ class SimilarityAnalyzer:
             raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
 
         #  Calculate similarity step by step
-        self.model = load_model(model_name)
-        #  Get embeddings from lineup
-        self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
+        # self.model = load_model(model_name)
+        # #  Get embeddings from lineup
+        # self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
 
     def preprocess_image(self, image_np):
         #  Check if the image is in PIL format, convert to numpy array if so
@@ -497,7 +503,8 @@ class SimilarityAnalyzer:
 
     def detect_faces_mtcnn(self, frame):
         faces = self.face_detector.detect_faces(frame)
-        face_images = [frame[face['box'][1]:face['box'][1] + face['box'][3], face['box'][0]:face['box'][0] + face['box'][2]] for face in faces]
+        face_images = [frame[face['box'][1]:face['box'][1] + face['box'][3],
+                             face['box'][0]:face['box'][0] + face['box'][2]] for face in faces]
         return face_images
 
     def detect_faces_opencv(self, frame):
@@ -513,27 +520,56 @@ class SimilarityAnalyzer:
         return face_images
 
     def analyze_frame(self, frame):
-        frame_results = []
-        detected_faces = self.detect_faces_in_frame(frame)
+        #  Use pre-detected faces for analysis
+        if self.detected_faces:
+            frame_results = self.analyze_with_detected()
 
-        for detected_face in detected_faces:
-            detected_face_np = self.preprocess_image(detected_face)
+        else:
+            frame_results = []
+            detected_faces = self.detect_faces_in_frame(frame)
+
+            for detected_face in detected_faces:
+                detected_face_np = self.preprocess_image(detected_face)
+                face_comparisons = []
+
+                for lineup_face in self.lineup_faces:
+                    lineup_face_np = self.preprocess_image(lineup_face)
+                    try:
+                        result = DeepFace.verify(detected_face_np, lineup_face_np,
+                                                 model_name=self.model_name, detector_backend=self.detector_backend)
+                        similarity_score = result['distance']
+                        face_comparisons.append(similarity_score)
+                    except ValueError as e:
+                        print(f"Warning: {e}")
+                        face_comparisons.append(None)  # Append None or some indicator of failed detection
+
+                frame_results.append(face_comparisons)
+
+        # return frame_results
+        return {
+            'facenet_distance': frame_results
+        }
+
+    def analyze_with_detected(self):
+        frame_results = []
+        for detected_face_info in self.detected_faces:
             face_comparisons = []
 
-            for lineup_face in self.lineup_faces:
-                lineup_face_np = self.preprocess_image(lineup_face)
-                try:
-                    result = DeepFace.verify(detected_face_np, lineup_face_np,
-                                             model_name=self.model_name, detector_backend=self.detector_backend)
-                    similarity_score = result['distance']
-                    face_comparisons.append(similarity_score)
-                except ValueError as e:
-                    print(f"Warning: {e}")
-                    face_comparisons.append(None)  # Append None or some indicator of failed detection
+            for detected_face in detected_face_info['images']:
+                detected_face_np = self.preprocess_image(detected_face)
+                for lineup_face in self.lineup_faces:
+                    lineup_face_np = self.preprocess_image(lineup_face)
+                    try:
+                        result = DeepFace.verify(detected_face_np, lineup_face_np,
+                                                 model_name=self.model_name, detector_backend=self.detector_backend)
+                        similarity_score = result['distance']
+                        face_comparisons.append(similarity_score)
+                    except ValueError as e:
+                        print(f"Warning: {e}")
+                        face_comparisons.append(None)  # Append None or some indicator of failed detection
 
             frame_results.append(face_comparisons)
 
-        # return frame_results
         return {
             'facenet_distance': frame_results
         }
