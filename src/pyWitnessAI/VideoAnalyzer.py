@@ -574,24 +574,6 @@ class SimilarityAnalyzer:
             'facenet_distance': frame_results
         }
 
-    def compare_embeddings(self, frame):
-        # # Detect faces using MTCNN detector
-        faces = DeepFace.detectFace(frame, detector_backend=self.face_detector, enforce_detection=False)
-
-        #  Get faces from the result of analyzers
-        # for detected_faces in detected
-        # Compute embeddings for each detected face in the frame
-        frame_embeddings = [self.get_embedding(face) for face in faces]
-
-        # Compute similarity values
-        similarity_values = []
-        for frame_emb in frame_embeddings:
-            similarities = [self.calculate_similarity(frame_emb, lineup_emb)
-                            for lineup_emb in self.lineup_embeddings]
-            similarity_values.append(similarities)
-
-        return {'facenet_cosine': similarity_values}
-
     def get_embedding(self, face):
 
         # face = cv.resize(face, (160,160))
