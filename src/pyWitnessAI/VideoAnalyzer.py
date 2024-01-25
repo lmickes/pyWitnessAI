@@ -375,16 +375,17 @@ class FrameAnalyzerMTCNN:
         self.detected_faces = []
 
     def analyze_frame(self, frame):
+        self.detected_faces = []
         faces = self.detector.detect_faces(frame)
 
         #  Faces and coordinates transfer
-        self.detected_faces = {
+        frame_results = {
             'coordinates': [face['box'] for face in faces],
             'images': [frame[face['box'][1]:face['box'][1] + face['box'][3],
                              face['box'][0]:face['box'][0] + face['box'][2]]
                        for face in faces]
         }
-
+        self.detected_faces.append(frame_results)
         confidence = self.get_confidence(faces)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
@@ -451,23 +452,21 @@ class FrameAnalyzerOpenCV:
 
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_faces, detected_faces=None,
-                 detector_backend='mtcnn', model_name='Facenet', name='similarity'):
+    def __init__(self, lineup_faces, detector=None,
+                 calculate_method='euclidean', model_name='Facenet', name='similarity'):
         #  Similarity calculation highly rely on deepface
         self.name = name
         self.lineup_faces = lineup_faces
+        self.calculate_method = calculate_method
         self.model_name = model_name
 
         #  Face detected from FrameAnalyzer used
-        try:
-            self.detected_faces = detected_faces
-        except ValueError as e:
-            print(f"Warning: {e}")
+        self.detector = detector
 
     def preprocess_image(self, image_np):
         #  Check if the image is in PIL format, convert to numpy array if so
-        if isinstance(image_np, Image.Image):
-            image_np = np.array(image_np)
+        # if isinstance(image_np, Image.Image):
+        #     image_np = np.array(image_np)
 
         #  Ensure image has 3 color channels (RGB)
         if image_np.shape[2] == 4:  # If the image has 4 x`channels (RGBA)
@@ -483,45 +482,57 @@ class SimilarityAnalyzer:
     def analyze_frame(self, frame):
         #  Use pre-detected faces for analysis
         frame_results = []
-        for detected_face_info in self.detected_faces:
+        detected_faces_info = self.detector.detected_faces  # Access the detected faces from the current frame
+        for detected_face_info in detected_faces_info:
             face_comparisons = []
 
             for detected_face in detected_face_info['images']:
                 detected_face_np = self.preprocess_image(detected_face)
+                embedding1 = self.get_embedding(detected_face)
+                emb1 = np.array(embedding1[0]['embedding'])
                 for lineup_face in self.lineup_faces:
                     lineup_face_np = self.preprocess_image(lineup_face)
-                    try:
-                        result = DeepFace.verify(detected_face_np, lineup_face_np,
-                                                 model_name=self.model_name, detector_backend=self.detector_backend)
-                        similarity_score = result['distance']
+                    # try:
+                    embedding2 = self.get_embedding(lineup_face)
+                    emb2 = np.array(embedding2[0]['embedding'])
+                    # print(type(emb2))
+                    # print(emb2)
+                    # emb2 = self.get_embedding(lineup_face)
+                    if self.calculate_method == 'euclidean':
+                        similarity_score = self.calculate_similarity_euclidean(emb1, emb2)
                         face_comparisons.append(similarity_score)
-                    except ValueError as e:
-                        print(f"Warning: {e}")
-                        face_comparisons.append(None)  # Append None or some indicator of failed detection
 
-            frame_results.append(face_comparisons)
+                    else:
+                        raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
+
+                    # except ValueError as e:
+                    #     print(f"Warning: {e}")
+                    # face_comparisons.append(None)  # Append None or some indicator of failed detection
+
+                frame_results.append(face_comparisons)
 
         return {
             'facenet_distance': frame_results
         }
 
-    def get_embedding(self, face):
+    def get_embedding(self, face, model_name='Facenet'):
+        model_name = self.model_name
 
-        # face = cv.resize(face, (160,160))
-        # face = functions.preprocess_face(face, target_size=(160,160), grayscale=False,
-        #                                  enforce_detection=False, detector_backend='opencv')[0]
-        # # Generate embedding using FaceNet
-        embedding = DeepFace.represent(face, model_name='Facenet', enforce_detection=False)
+        #  Generate embedding using FaceNet
+        embedding = DeepFace.represent(face, model_name=model_name, enforce_detection=False)
         return np.array(embedding)
 
+    def calculate_similarity_euclidean(self, emb1, emb2):
+        return np.linalg.norm(emb1 - emb2)
 
-    def calculate_similarity(self, emb1, emb2):
+    def calculate_similarity_cosine(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
         dot_product = np.dot(emb1, emb2)
         norm_emb1 = np.linalg.norm(emb1)
         norm_emb2 = np.linalg.norm(emb2)
         similarity = dot_product / (norm_emb1 * norm_emb2)
         return similarity
+
 
 
 class LineupLoader:
