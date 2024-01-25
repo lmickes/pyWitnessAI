@@ -458,18 +458,9 @@ class SimilarityAnalyzer:
         self.lineup_faces = lineup_faces
 
         #  Face detected from FrameAnalyzer used
-        self.detected_faces = detected_faces
-
-        self.detector_backend = detector_backend
-        self.model_name = model_name
-        #  Initialize the face detector
-        if self.detector_backend == 'mtcnn':
-            self.face_detector = MTCNN()
-        elif self.detector_backend == 'opencv':
-            self.face_detector = cv.CascadeClassifier(cv.data.haarcascades + "haarcascade_frontalface_default.xml")
-        elif self.detector_backend == 'dlib':
-            self.face_detector = dlib.get_frontal_face_detector()
-        else:
+        try:
+            self.detected_faces = detected_faces
+        except ValueError as e:
             raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
 
         #  Calculate similarity step by step
