@@ -456,17 +456,13 @@ class SimilarityAnalyzer:
         #  Similarity calculation highly rely on deepface
         self.name = name
         self.lineup_faces = lineup_faces
+        self.model_name = model_name
 
         #  Face detected from FrameAnalyzer used
         try:
             self.detected_faces = detected_faces
         except ValueError as e:
-            raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
-
-        #  Calculate similarity step by step
-        # self.model = load_model(model_name)
-        # #  Get embeddings from lineup
-        # self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
+            print(f"Warning: {e}")
 
     def preprocess_image(self, image_np):
         #  Check if the image is in PIL format, convert to numpy array if so
@@ -483,32 +479,6 @@ class SimilarityAnalyzer:
         # Convert color from RGB to BGR
         resized_image = resized_image[:, :, ::-1]
         return resized_image
-
-    def detect_faces_in_frame(self, frame):
-        if self.detector_backend == 'mtcnn':
-            return self.detect_faces_mtcnn(frame)
-        elif self.detector_backend == 'opencv':
-            return self.detect_faces_opencv(frame)
-        elif self.detector_backend == 'dlib':
-            return self.detect_faces_dlib(frame)
-
-    def detect_faces_mtcnn(self, frame):
-        faces = self.face_detector.detect_faces(frame)
-        face_images = [frame[face['box'][1]:face['box'][1] + face['box'][3],
-                             face['box'][0]:face['box'][0] + face['box'][2]] for face in faces]
-        return face_images
-
-    def detect_faces_opencv(self, frame):
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        faces = self.face_detector.detectMultiScale(gray, 1.1, 4)
-        face_images = [frame[y:y+h, x:x+w] for (x, y, w, h) in faces]
-        return face_images
-
-    def detect_faces_dlib(self, frame):
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        faces = self.face_detector(gray)
-        face_images = [frame[face.top():face.bottom(), face.left():face.right()] for face in faces]
-        return face_images
 
     def analyze_frame(self, frame):
         #  Use pre-detected faces for analysis
