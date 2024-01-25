@@ -482,36 +482,6 @@ class SimilarityAnalyzer:
 
     def analyze_frame(self, frame):
         #  Use pre-detected faces for analysis
-        if self.detected_faces:
-            frame_results = self.analyze_with_detected()
-
-        else:
-            frame_results = []
-            detected_faces = self.detect_faces_in_frame(frame)
-
-            for detected_face in detected_faces:
-                detected_face_np = self.preprocess_image(detected_face)
-                face_comparisons = []
-
-                for lineup_face in self.lineup_faces:
-                    lineup_face_np = self.preprocess_image(lineup_face)
-                    try:
-                        result = DeepFace.verify(detected_face_np, lineup_face_np,
-                                                 model_name=self.model_name, detector_backend=self.detector_backend)
-                        similarity_score = result['distance']
-                        face_comparisons.append(similarity_score)
-                    except ValueError as e:
-                        print(f"Warning: {e}")
-                        face_comparisons.append(None)  # Append None or some indicator of failed detection
-
-                frame_results.append(face_comparisons)
-
-        # return frame_results
-        return {
-            'facenet_distance': frame_results
-        }
-
-    def analyze_with_detected(self):
         frame_results = []
         for detected_face_info in self.detected_faces:
             face_comparisons = []
