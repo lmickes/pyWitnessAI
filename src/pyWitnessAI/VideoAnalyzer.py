@@ -463,53 +463,26 @@ class SimilarityAnalyzer:
         #  Face detected from FrameAnalyzer used
         self.detector = detector
 
-    def preprocess_image(self, image_np):
-        #  Check if the image is in PIL format, convert to numpy array if so
-        # if isinstance(image_np, Image.Image):
-        #     image_np = np.array(image_np)
-
-        #  Ensure image has 3 color channels (RGB)
-        if image_np.shape[2] == 4:  # If the image has 4 x`channels (RGBA)
-            image_np = image_np[:, :, :3]  # Drop the alpha channel
-
-        #  Resize the image to 160x160 pixels using OpenCV
-        resized_image = cv.resize(image_np, (160, 160))
-
-        # Convert color from RGB to BGR
-        resized_image = resized_image[:, :, ::-1]
-        return resized_image
-
     def analyze_frame(self, frame):
         #  Use pre-detected faces for analysis
         frame_results = []
-        detected_faces_info = self.detector.detected_faces  # Access the detected faces from the current frame
-        for detected_face_info in detected_faces_info:
+        detected_faces_images = self.detector.detected_faces[0]['images']  # Access the detected faces from the current frame
+        # for detected_face_info in detected_faces_info:
+        for detected_face in detected_faces_images:
             face_comparisons = []
-
-            for detected_face in detected_face_info['images']:
-                detected_face_np = self.preprocess_image(detected_face)
-                embedding1 = self.get_embedding(detected_face)
-                emb1 = np.array(embedding1[0]['embedding'])
-                for lineup_face in self.lineup_faces:
-                    lineup_face_np = self.preprocess_image(lineup_face)
-                    # try:
-                    embedding2 = self.get_embedding(lineup_face)
-                    emb2 = np.array(embedding2[0]['embedding'])
-                    # print(type(emb2))
-                    # print(emb2)
-                    # emb2 = self.get_embedding(lineup_face)
-                    if self.calculate_method == 'euclidean':
-                        similarity_score = self.calculate_similarity_euclidean(emb1, emb2)
-                        face_comparisons.append(similarity_score)
-
-                    else:
-                        raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
-
-                    # except ValueError as e:
-                    #     print(f"Warning: {e}")
-                    # face_comparisons.append(None)  # Append None or some indicator of failed detection
-
-                frame_results.append(face_comparisons)
+            # detected_face_np = self.preprocess_image(detected_face)
+            embedding1 = self.get_embedding(detected_face)
+            emb1 = np.array(embedding1[0]['embedding'])
+            for lineup_face in self.lineup_faces:
+                # lineup_face_np = self.preprocess_image(lineup_face)
+                embedding2 = self.get_embedding(lineup_face)
+                emb2 = np.array(embedding2[0]['embedding'])
+                if self.calculate_method == 'euclidean':
+                    similarity_score = self.calculate_similarity_euclidean(emb1, emb2)
+                    face_comparisons.append(similarity_score)
+                else:
+                    raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
+            frame_results.append(face_comparisons)
 
         return {
             'facenet_distance': frame_results
@@ -532,6 +505,22 @@ class SimilarityAnalyzer:
         norm_emb2 = np.linalg.norm(emb2)
         similarity = dot_product / (norm_emb1 * norm_emb2)
         return similarity
+
+    def preprocess_image(self, image_np):
+        #  Check if the image is in PIL format, convert to numpy array if so
+        # if isinstance(image_np, Image.Image):
+        #     image_np = np.array(image_np)
+
+        #  Ensure image has 3 color channels (RGB)
+        if image_np.shape[2] == 4:  # If the image has 4 x`channels (RGBA)
+            image_np = image_np[:, :, :3]  # Drop the alpha channel
+
+        #  Resize the image to 160x160 pixels using OpenCV
+        resized_image = cv.resize(image_np, (160, 160))
+
+        # Convert color from RGB to BGR
+        resized_image = resized_image[:, :, ::-1]
+        return resized_image
 
 
 
