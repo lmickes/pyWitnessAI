@@ -454,11 +454,10 @@ class FrameAnalyzerOpenCV:
 class SimilarityAnalyzer:
     def __init__(self, lineup_faces, detector=None,
                  calculate_method='euclidean', model_name='Facenet', name='similarity'):
-        #  Similarity calculation highly rely on deepface
         self.name = name
         self.lineup_faces = lineup_faces
         self.calculate_method = calculate_method
-        self.model_name = model_name
+        self.model_name = model_name   # The model to get the embedding
 
         #  Face detected from FrameAnalyzer used
         self.detector = detector
@@ -466,22 +465,29 @@ class SimilarityAnalyzer:
     def analyze_frame(self, frame):
         #  Use pre-detected faces for analysis
         frame_results = []
-        detected_faces_images = self.detector.detected_faces[0]['images']  # Access the detected faces from the current frame
+
+        # Access the detected faces from the current frame
+        detected_faces_images = self.detector.detected_faces[0]['images']
+
         # for detected_face_info in detected_faces_info:
         for detected_face in detected_faces_images:
             face_comparisons = []
+
             # detected_face_np = self.preprocess_image(detected_face)
             embedding_results_detected = self.get_embedding(detected_face)
             emb_detected = np.array(embedding_results_detected[0]['embedding'])
+
             for lineup_face in self.lineup_faces:
                 # lineup_face_np = self.preprocess_image(lineup_face)
                 embedding_results_lineup = self.get_embedding(lineup_face)
                 emb_lineup = np.array(embedding_results_lineup[0]['embedding'])
+
                 if self.calculate_method == 'euclidean':
                     similarity_score = self.calculate_similarity_euclidean(emb_detected, emb_lineup)
                     face_comparisons.append(similarity_score)
                 else:
                     raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
+
             frame_results.append(face_comparisons)
 
         return {
