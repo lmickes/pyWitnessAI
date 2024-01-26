@@ -471,14 +471,14 @@ class SimilarityAnalyzer:
         for detected_face in detected_faces_images:
             face_comparisons = []
             # detected_face_np = self.preprocess_image(detected_face)
-            embedding1 = self.get_embedding(detected_face)
-            emb1 = np.array(embedding1[0]['embedding'])
+            embedding_results_detected = self.get_embedding(detected_face)
+            emb_detected = np.array(embedding_results_detected[0]['embedding'])
             for lineup_face in self.lineup_faces:
                 # lineup_face_np = self.preprocess_image(lineup_face)
-                embedding2 = self.get_embedding(lineup_face)
-                emb2 = np.array(embedding2[0]['embedding'])
+                embedding_results_lineup = self.get_embedding(lineup_face)
+                emb_lineup = np.array(embedding_results_lineup[0]['embedding'])
                 if self.calculate_method == 'euclidean':
-                    similarity_score = self.calculate_similarity_euclidean(emb1, emb2)
+                    similarity_score = self.calculate_similarity_euclidean(emb_detected, emb_lineup)
                     face_comparisons.append(similarity_score)
                 else:
                     raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
