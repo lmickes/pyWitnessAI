@@ -374,7 +374,18 @@ class FrameAnalyzerMTCNN:
         #  Store detected faces as well as coordinates for transfer
         self.detected_faces = []
 
+        #  A counter for face swapping function
+        self.counter = 0
+        self.face_order = []
+
     def analyze_frame(self, frame):
+        #  A simple way to prevent face swapping when the video is easy to be analyzed
+        if self.counter != 0:
+            for coord in self.detected_faces[0]['coordinates']:
+                center_x = coord[0] + coord[2] // 2
+                center_y = coord[1] + coord[3] // 2
+                self.face_order.append((center_x, center_y))
+        current_faces_order = self.detected_faces
         self.detected_faces = []
         faces = self.detector.detect_faces(frame)
 
@@ -390,6 +401,7 @@ class FrameAnalyzerMTCNN:
         face_count = len(faces)
         face_area = self.get_face_area(faces)
         coordinates = self.get_face_coordinates(faces)
+        self.counter += 1
 
         return {
             # f'{self.name}_face_count': face_count,
