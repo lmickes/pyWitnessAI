@@ -374,18 +374,12 @@ class FrameAnalyzerMTCNN:
         #  Store detected faces as well as coordinates for transfer
         self.detected_faces = []
 
-        #  A counter for face swapping function
+        #  Attributes for face swapping function
         self.counter = 0
-        self.face_order = []
+        self.face_order_previous = []
+        self.face_order_current = []
 
     def analyze_frame(self, frame):
-        #  A simple way to prevent face swapping when the video is easy to be analyzed
-        if self.counter != 0:
-            for coord in self.detected_faces[0]['coordinates']:
-                center_x = coord[0] + coord[2] // 2
-                center_y = coord[1] + coord[3] // 2
-                self.face_order.append((center_x, center_y))
-        current_faces_order = self.detected_faces
         self.detected_faces = []
         faces = self.detector.detect_faces(frame)
 
@@ -397,10 +391,32 @@ class FrameAnalyzerMTCNN:
                        for face in faces]
         }
         self.detected_faces.append(frame_results)
+
+        #  Get the center coordinates of the faces in the current frame
+        for coord in self.detected_faces[0]['coordinates']:
+            center_x = coord[0] + coord[2] // 2
+            center_y = coord[1] + coord[3] // 2
+            self.face_order_current.append((center_x, center_y))
+
+        #  A simple way to prevent face swapping when the video is easy to be analyzed
+        if self.counter == 0:
+            self.face_order_previous = self.face_order_current
+
+        #  Make the faces of the two frame consistent with each other
+        self.mix_and_match(self.face_order_current, self.face_order_previous)
+
+        #  Change the face order of the detected faces in current frame
+
+        #  Update the positions of faces in the current frame
+        self.face_order_previous = self.face_order_current
+        self.face_order_current = []
+
         confidence = self.get_confidence(faces)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
         coordinates = self.get_face_coordinates(faces)
+
+        #  A counter for the face swapping function
         self.counter += 1
 
         return {
@@ -430,6 +446,13 @@ class FrameAnalyzerMTCNN:
             coordinates.append(face['box'])
 
         return coordinates
+
+    def mix_and_match(self, face_order_current, face_order_previous):
+        if len(face_order_current) == 0:
+            pass
+        if len(face_order_current) == len(face_order_previous):
+            pass
+
 
 
 class FrameAnalyzerOpenCV:
