@@ -403,9 +403,8 @@ class FrameAnalyzerMTCNN:
             self.face_order_previous = self.face_order_current
 
         #  Make the faces of the two frame consistent with each other
-        self.mix_and_match(self.face_order_current, self.face_order_previous)
-
-        #  Change the face order of the detected faces in current frame
+        #  And change the face order of the detected faces in current frame
+        self.detected_faces = self.mix_and_match(self.face_order_current, self.face_order_previous, self.detected_faces)
 
         #  Update the positions of faces in the current frame
         self.face_order_previous = self.face_order_current
@@ -447,12 +446,34 @@ class FrameAnalyzerMTCNN:
 
         return coordinates
 
-    def mix_and_match(self, face_order_current, face_order_previous):
-        if len(face_order_current) == 0:
-            pass
-        if len(face_order_current) == len(face_order_previous):
-            pass
+    def mix_and_match(self, face_order_current, face_order_previous, detected_faces):
+        #  Make sure that the length of list are the same
+        while len(face_order_current) < len(face_order_previous):
+            face_order_current.append([])
+            detected_faces.append({"coordinates": [], "images": []})
+        while len(face_order_current) > len(face_order_previous):
+            face_order_previous.append([])
 
+        #  Calculate Euclidean distance
+        distances = np.zeros((len(face_order_current), len(face_order_previous)))
+        for i, coord_current in enumerate(face_order_current):
+            for j, coord_previous in enumerate(face_order_previous):
+                if coord_current and coord_previous:
+                    distances[i][j] = np.linalg.norm(np.array(coord_current) - np.array(coord_previous))
+                else:
+                    distances[i][j] = np.inf
+
+        #  Match the best fit coordinates
+        matched_indices = []
+        for _ in range(len(face_order_current)):
+            i, j = np.unravel_index(np.argmin(distances), distances.shape)
+            matched_indices.append(i)
+            distances[i, :] = np.inf
+            distances[:, j] = np.inf
+
+        #  Re-order the detected_faces
+        detected_faces_sorted = [detected_faces[i] for i in matched_indices]
+        return detected_faces_sorted
 
 
 class FrameAnalyzerOpenCV:
