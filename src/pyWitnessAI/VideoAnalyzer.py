@@ -381,6 +381,7 @@ class FrameAnalyzerMTCNN:
 
     def analyze_frame(self, frame):
         self.detected_faces = []
+        self.face_order_current = []
         faces = self.detector.detect_faces(frame)
 
         #  Faces and coordinates transfer
@@ -408,7 +409,6 @@ class FrameAnalyzerMTCNN:
 
         #  Update the positions of faces in the current frame
         self.face_order_previous = self.face_order_current
-        self.face_order_current = []
 
         confidence = self.get_confidence(faces)
         face_count = len(faces)
@@ -472,7 +472,8 @@ class FrameAnalyzerMTCNN:
             distances[:, j] = np.inf
 
         #  Re-order the detected_faces
-        detected_faces_sorted = [detected_faces[i] for i in matched_indices]
+        detected_faces_sorted = [detected_faces[i] for i in matched_indices if i < len(detected_faces)]
+
         return detected_faces_sorted
 
 
