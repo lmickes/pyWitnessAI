@@ -536,9 +536,13 @@ class LineupLoader:
         self.lineup_images = []
         self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
         self.lineup_images = []
+        self.image_paths = None
         if image_paths is not None:
             self.image_paths = image_paths
-            self.number = len(self.image_paths)
+            if image_number == 0:
+                self.number = len(self.image_paths)
+            else:
+                self.number = image_number
         elif directory_path is not None:
             self.directory_path = directory_path
             # self.image_paths = self._load_paths_from_directory()
