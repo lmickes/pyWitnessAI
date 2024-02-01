@@ -529,38 +529,56 @@ class SimilarityAnalyzer:
         return resized_image
 
 
-
 class LineupLoader:
-    def __init__(self, image_number=0, image_path=None):
-        if image_path is None:
-            self.image_path = ["E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien99.jpg",
-                               "E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien1999.jpg"]
-        else:
-            self.image_path = image_path
-        if image_number == 0:
-            self.number = len(image_path)
-        else:
-            self.number = image_number
+    def __init__(self, image_paths=None, directory_path=None, target_size=(160, 160), image_number=0):
+        self.directory_path = directory_path
+        self.target_size = target_size
         self.lineup_images = []
+        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
+        self.lineup_images = []
+        if image_paths is not None:
+            self.image_paths = image_paths
+            self.number = len(self.image_paths)
+        elif directory_path is not None:
+            self.directory_path = directory_path
+            # self.image_paths = self._load_paths_from_directory()
+        else:
+            raise ValueError("Either image paths or directory path must be provided.")
 
-    def preprocess_image(self, image, target_size=(160, 160)):
-        image = cv.resize(image, target_size)
+    def is_image_file(self, filename):
+        return any(filename.endswith(ext) for ext in self.image_extensions)
+
+    def preprocess_image(self, image):
+        image = cv.resize(image, self.target_size)
         return image
 
     def load_image(self):
         count = 0
         loaded_images = []
 
-        for path in self.image_path:
-            if count >= self.number:
-                break
-            image = cv.imread(path)
-            processed_image = self.preprocess_image(image)
-            loaded_images.append(processed_image)
-            count += 1
-        self.lineup_images = loaded_images
-        return loaded_images
+        if self.directory_path is None:
+            raise ValueError("Directory path must be specified.")
 
+        if self.image_paths is not None:
+            for path in self.image_paths:
+                if count >= self.number:
+                    break
+                image = cv.imread(path)
+                processed_image = self.preprocess_image(image)
+                loaded_images.append(processed_image)
+                count += 1
+            self.lineup_images = loaded_images
+            return loaded_images
+
+        if self.directory_path is not None:
+            for filename in os.listdir(self.directory_path):
+                if self.is_image_file(filename):
+                    full_path = os.path.join(self.directory_path, filename)
+                    image = cv.imread(full_path)
+                    if image is not None:
+                        processed_image = self.preprocess_image(image)
+                        self.lineup_images.append(processed_image)
+            return self.lineup_images
 
 
 
