@@ -16,9 +16,18 @@ from deepface.commons import functions
 
 
 class VideoAnalyzer:
-    def __init__(self, video_path):
-        self.video_path = video_path
-        self.cap = cv.VideoCapture(video_path)
+    def __init__(self, *input_paths):
+        self.input_paths = input_paths
+        self.is_video = len(input_paths) == 1 and input_paths[0].endswith(('.mp4', '.avi', '.mov', '.mkv'))
+
+        if self.is_video:
+            self.video_path = input_paths[0]
+            self.cap = cv.VideoCapture(self.video_path)
+        else:
+            self.frames = [cv.imread(path) for path in input_paths]
+
+        # self.video_path = video_path
+        # self.cap = cv.VideoCapture(video_path)
         self.frame_count = []
         self.frame_width = None
         self.frame_height = None
@@ -41,18 +50,28 @@ class VideoAnalyzer:
         self.frame_processor[processor.name] = processor
 
     def release_resources(self):
-        self.cap.release()
-        for processor in self.frame_processor.values():
-            if hasattr(processor, 'release'):
-                processor.release()
+        if self.is_video:
+            self.cap.release()
+            for processor in self.frame_processor.values():
+                if hasattr(processor, 'release'):
+                    processor.release()
+        cv.destroyAllWindows()
 
     def get_frame_info(self):
         #  Retrieve frame information
-        self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
-        self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-        self.frame_area = self.frame_width * self.frame_height
+        if self.is_video:
+            self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
+            self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+            self.frame_area = self.frame_width * self.frame_height
+        else:
+            self.frame_width, self.frame_height, _ = self.frames[0].shape
+            self.frame_area = self.frame_width * self.frame_height
 
     def process_video(self, frame_start=0, frame_end=1000000000):
+        # Skip processing if it's not a video input
+        if not self.is_video:
+            return
+
         #  Process the video frame between frame_start and frame_end
         frame_analyzed = 0
 
@@ -81,7 +100,28 @@ class VideoAnalyzer:
         self.average_value = np.mean(self.average_pixel_values)
         self.frame_analyzed = frame_analyzed
         self.release_resources()
-        cv.destroyAllWindows()
+
+    def process_images(self):
+        if self.is_video:
+            return  # Skip processing if it's a video input
+
+        frame_analyzed = 0
+
+        for frame in self.frames:
+            self.frame_count.append(frame_analyzed)
+            average_pixel_value = int(frame.mean())
+            self.average_pixel_values.append(average_pixel_value)
+
+            for k in self.frame_processor:
+                frame = self.frame_processor[k].process_frame(frame)
+
+            for k in self.frame_analyzer:
+                self.frame_analyzer_output[k].append(self.frame_analyzer[k].analyze_frame(frame))
+
+            frame_analyzed += 1
+
+        self.average_value = np.mean(self.average_pixel_values)
+        self.frame_analyzed = frame_analyzed
 
     def get_analysis_info(self):
         #  Get the number of analyzed frame and total frames
@@ -91,7 +131,10 @@ class VideoAnalyzer:
         }
 
     def run(self, frame_start=0, frame_end=100000):
-        self.process_video(frame_start, frame_end)
+        if self.is_video:
+            self.process_video(frame_start, frame_end)
+        else:
+            self.process_images()
 
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
