@@ -16,9 +16,18 @@ from deepface.commons import functions
 
 
 class VideoAnalyzer:
-    def __init__(self, video_path):
-        self.video_path = video_path
-        self.cap = cv.VideoCapture(video_path)
+    def __init__(self, *input_paths):
+        self.input_paths = input_paths
+        self.is_video = len(input_paths) == 1 and input_paths[0].endswith(('.mp4', '.avi', '.mov', '.mkv'))
+
+        if self.is_video:
+            self.video_path = input_paths[0]
+            self.cap = cv.VideoCapture(self.video_path)
+        else:
+            self.frames = [cv.imread(path) for path in input_paths]
+
+        # self.video_path = video_path
+        # self.cap = cv.VideoCapture(video_path)
         self.frame_count = []
         self.frame_width = None
         self.frame_height = None
@@ -41,18 +50,28 @@ class VideoAnalyzer:
         self.frame_processor[processor.name] = processor
 
     def release_resources(self):
-        self.cap.release()
-        for processor in self.frame_processor.values():
-            if hasattr(processor, 'release'):
-                processor.release()
+        if self.is_video:
+            self.cap.release()
+            for processor in self.frame_processor.values():
+                if hasattr(processor, 'release'):
+                    processor.release()
+        cv.destroyAllWindows()
 
     def get_frame_info(self):
         #  Retrieve frame information
-        self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
-        self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-        self.frame_area = self.frame_width * self.frame_height
+        if self.is_video:
+            self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
+            self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+            self.frame_area = self.frame_width * self.frame_height
+        else:
+            self.frame_width, self.frame_height, _ = self.frames[0].shape
+            self.frame_area = self.frame_width * self.frame_height
 
     def process_video(self, frame_start=0, frame_end=1000000000):
+        # Skip processing if it's not a video input
+        if not self.is_video:
+            return
+
         #  Process the video frame between frame_start and frame_end
         frame_analyzed = 0
 
@@ -81,7 +100,28 @@ class VideoAnalyzer:
         self.average_value = np.mean(self.average_pixel_values)
         self.frame_analyzed = frame_analyzed
         self.release_resources()
-        cv.destroyAllWindows()
+
+    def process_images(self):
+        if self.is_video:
+            return  # Skip processing if it's a video input
+
+        frame_analyzed = 0
+
+        for frame in self.frames:
+            self.frame_count.append(frame_analyzed)
+            average_pixel_value = int(frame.mean())
+            self.average_pixel_values.append(average_pixel_value)
+
+            for k in self.frame_processor:
+                frame = self.frame_processor[k].process_frame(frame)
+
+            for k in self.frame_analyzer:
+                self.frame_analyzer_output[k].append(self.frame_analyzer[k].analyze_frame(frame))
+
+            frame_analyzed += 1
+
+        self.average_value = np.mean(self.average_pixel_values)
+        self.frame_analyzed = frame_analyzed
 
     def get_analysis_info(self):
         #  Get the number of analyzed frame and total frames
@@ -91,7 +131,10 @@ class VideoAnalyzer:
         }
 
     def run(self, frame_start=0, frame_end=100000):
-        self.process_video(frame_start, frame_end)
+        if self.is_video:
+            self.process_video(frame_start, frame_end)
+        else:
+            self.process_images()
 
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
@@ -371,9 +414,21 @@ class FrameAnalyzerMTCNN:
     def __init__(self, name="mtcnn"):
         self.detector = MTCNN()
         self.name = name
+        #  Store detected faces as well as coordinates for transfer
+        self.detected_faces = []
 
     def analyze_frame(self, frame):
+        self.detected_faces = []
         faces = self.detector.detect_faces(frame)
+
+        #  Faces and coordinates transfer
+        frame_results = {
+            'coordinates': [face['box'] for face in faces],
+            'images': [frame[face['box'][1]:face['box'][1] + face['box'][3],
+                             face['box'][0]:face['box'][0] + face['box'][2]]
+                       for face in faces]
+        }
+        self.detected_faces.append(frame_results)
         confidence = self.get_confidence(faces)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
@@ -420,43 +475,90 @@ class FrameAnalyzerOpenCV:
         faces = self.face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5)
         face_count = len(faces)
         face_area = self.get_face_area(faces)
+        face_coordinates = self.get_face_coordinates(faces)
 
         return {
             f'face_count': face_count,
-            f'face_area': face_area
+            f'face_area': face_area,
+            f'coordinates': face_coordinates
         }
 
     def get_face_area(self, faces):
         face_area_sum = sum([w * h for (x, y, w, h) in faces])
         return face_area_sum
 
+    def get_face_coordinates(self, faces):
+        coordinates = []
+        for (x, y, w, h) in faces:
+            coordinates.append([x, y, w, h])
+        return coordinates
+
 
 class SimilarityAnalyzer:
-    def __init__(self, lineup_faces, detector_backend='mtcnn', model_name='Facenet', name='similarity'):
-        #  Similarity calculation highly rely on deepface
+    def __init__(self, lineup_faces, detector=None,
+                 calculate_method='euclidean', model_name='Facenet', name='similarity'):
         self.name = name
         self.lineup_faces = lineup_faces
-        self.detector_backend = detector_backend
-        self.model_name = model_name
-        #  Initialize the face detector
-        if self.detector_backend == 'mtcnn':
-            self.face_detector = MTCNN()
-        elif self.detector_backend == 'opencv':
-            self.face_detector = cv.CascadeClassifier(cv.data.haarcascades + "haarcascade_frontalface_default.xml")
-        elif self.detector_backend == 'dlib':
-            self.face_detector = dlib.get_frontal_face_detector()
-        else:
-            raise ValueError(f"Unsupported detector backend: {self.detector_backend}")
+        self.calculate_method = calculate_method
+        self.model_name = model_name   # The model to get the embedding
 
-        # #  Calculate similarity step by step
-        # self.model = load_model(model_name)
-        # #  Get embeddings from lineup
-        # self.lineup_embeddings = [self.get_embedding(face) for face in lineup_faces]
+        #  Face detected from FrameAnalyzer used
+        self.detector = detector
+
+    def analyze_frame(self, frame):
+        #  Use pre-detected faces for analysis
+        frame_results = []
+
+        # Access the detected faces from the current frame
+        detected_faces_images = self.detector.detected_faces[0]['images']
+
+        # for detected_face_info in detected_faces_info:
+        for detected_face in detected_faces_images:
+            face_comparisons = []
+
+            # detected_face_np = self.preprocess_image(detected_face)
+            embedding_results_detected = self.get_embedding(detected_face)
+            emb_detected = np.array(embedding_results_detected[0]['embedding'])
+
+            for lineup_face in self.lineup_faces:
+                # lineup_face_np = self.preprocess_image(lineup_face)
+                embedding_results_lineup = self.get_embedding(lineup_face)
+                emb_lineup = np.array(embedding_results_lineup[0]['embedding'])
+
+                if self.calculate_method == 'euclidean':
+                    similarity_score = self.calculate_similarity_euclidean(emb_detected, emb_lineup)
+                    face_comparisons.append(similarity_score)
+                else:
+                    raise ValueError(f"Unsupported detector backend: {self.calculate_method}")
+
+            frame_results.append(face_comparisons)
+
+        return {
+            'facenet_distance': frame_results
+        }
+
+    def get_embedding(self, face, model_name='Facenet'):
+        model_name = self.model_name
+
+        #  Generate embedding using FaceNet
+        embedding = DeepFace.represent(face, model_name=model_name, enforce_detection=False)
+        return np.array(embedding)
+
+    def calculate_similarity_euclidean(self, emb1, emb2):
+        return np.linalg.norm(emb1 - emb2)
+
+    def calculate_similarity_cosine(self, emb1, emb2):
+        #  return np.linalg.norm(emb1 - emb2) #  L2 norm
+        dot_product = np.dot(emb1, emb2)
+        norm_emb1 = np.linalg.norm(emb1)
+        norm_emb2 = np.linalg.norm(emb2)
+        similarity = dot_product / (norm_emb1 * norm_emb2)
+        return similarity
 
     def preprocess_image(self, image_np):
         #  Check if the image is in PIL format, convert to numpy array if so
-        if isinstance(image_np, Image.Image):
-            image_np = np.array(image_np)
+        # if isinstance(image_np, Image.Image):
+        #     image_np = np.array(image_np)
 
         #  Ensure image has 3 color channels (RGB)
         if image_np.shape[2] == 4:  # If the image has 4 x`channels (RGBA)
@@ -469,125 +571,61 @@ class SimilarityAnalyzer:
         resized_image = resized_image[:, :, ::-1]
         return resized_image
 
-    def detect_faces_in_frame(self, frame):
-        if self.detector_backend == 'mtcnn':
-            return self.detect_faces_mtcnn(frame)
-        elif self.detector_backend == 'opencv':
-            return self.detect_faces_opencv(frame)
-        elif self.detector_backend == 'dlib':
-            return self.detect_faces_dlib(frame)
-
-    def detect_faces_mtcnn(self, frame):
-        faces = self.face_detector.detect_faces(frame)
-        face_images = [frame[face['box'][1]:face['box'][1] + face['box'][3], face['box'][0]:face['box'][0] + face['box'][2]] for face in faces]
-        return face_images
-
-    def detect_faces_opencv(self, frame):
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        faces = self.face_detector.detectMultiScale(gray, 1.1, 4)
-        face_images = [frame[y:y+h, x:x+w] for (x, y, w, h) in faces]
-        return face_images
-
-    def detect_faces_dlib(self, frame):
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        faces = self.face_detector(gray)
-        face_images = [frame[face.top():face.bottom(), face.left():face.right()] for face in faces]
-        return face_images
-
-    def analyze_frame(self, frame):
-        frame_results = []
-        detected_faces = self.detect_faces_in_frame(frame)
-
-        for detected_face in detected_faces:
-            detected_face_np = self.preprocess_image(detected_face)
-            face_comparisons = []
-
-            for lineup_face in self.lineup_faces:
-                lineup_face_np = self.preprocess_image(lineup_face)
-                try:
-                    result = DeepFace.verify(detected_face_np, lineup_face_np,
-                                             model_name=self.model_name, detector_backend=self.detector_backend)
-                    similarity_score = result['distance']
-                    face_comparisons.append(similarity_score)
-                except ValueError as e:
-                    print(f"Warning: {e}")
-                    face_comparisons.append(None)  # Append None or some indicator of failed detection
-
-            frame_results.append(face_comparisons)
-
-        # return frame_results
-        return {
-            'facenet_distance': frame_results
-        }
-
-    def compare_embeddings(self, detected_faces):
-        # # Detect faces using MTCNN detector
-        # faces = DeepFace.detectFace(frame, detector_backend=self.face_detector, enforce_detection=False)
-
-        #  Get faces from the result of analyzers
-        # for detected_faces in detected
-        # Compute embeddings for each detected face in the frame
-        frame_embeddings = [self.get_embedding(face) for face in faces]
-
-        # Compute similarity values
-        similarity_values = []
-        for frame_emb in frame_embeddings:
-            similarities = [self.calculate_similarity(frame_emb, lineup_emb)
-                            for lineup_emb in self.lineup_embeddings]
-            similarity_values.append(similarities)
-
-        return {'facenet_cosine': similarity_values}
-
-    def get_embedding(self, face):
-
-        face = cv.resize(face, (160,160))
-        # face = functions.preprocess_face(face, target_size=(160,160), grayscale=False,
-        #                                  enforce_detection=False, detector_backend='opencv')[0]
-        # # Generate embedding using FaceNet
-        embedding = DeepFace.represent(face, model_name='Facenet', enforce_detection=False)
-        return np.array(embedding)
-
-
-    def calculate_similarity(self, emb1, emb2):
-        #  return np.linalg.norm(emb1 - emb2) #  L2 norm
-        dot_product = np.dot(emb1, emb2)
-        norm_emb1 = np.linalg.norm(emb1)
-        norm_emb2 = np.linalg.norm(emb2)
-        similarity = dot_product / (norm_emb1 * norm_emb2)
-        return similarity
-
 
 class LineupLoader:
-    def __init__(self, image_number=0, image_path=None):
-        if image_path is None:
-            self.image_path = ["E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien99.jpg",
-                               "E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien1999.jpg"]
-        else:
-            self.image_path = image_path
-        if image_number == 0:
-            self.number = len(image_path)
-        else:
-            self.number = image_number
+    def __init__(self, image_paths=None, directory_path=None, target_size=(160, 160), image_number=0):
+        self.directory_path = directory_path
+        self.target_size = target_size
         self.lineup_images = []
+        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
+        self.lineup_images = []
+        self.image_paths = None
+        if image_paths is not None:
+            self.image_paths = image_paths
+            if image_number == 0:
+                self.number = len(self.image_paths)
+            else:
+                self.number = image_number
+        elif directory_path is not None:
+            self.directory_path = directory_path
+            # self.image_paths = self._load_paths_from_directory()
+        else:
+            raise ValueError("Either image paths or directory path must be provided.")
 
-    def preprocess_image(self, image, target_size=(160, 160)):
-        image = cv.resize(image, target_size)
+    def is_image_file(self, filename):
+        return any(filename.endswith(ext) for ext in self.image_extensions)
+
+    def preprocess_image(self, image):
+        image = cv.resize(image, self.target_size)
         return image
 
     def load_image(self):
         count = 0
         loaded_images = []
 
-        for path in self.image_path:
-            if count >= self.number:
-                break
-            image = cv.imread(path)
-            processed_image = self.preprocess_image(image)
-            loaded_images.append(processed_image)
-            count += 1
-        self.lineup_images = loaded_images
-        return loaded_images
+        if self.directory_path is None:
+            raise ValueError("Directory path must be specified.")
 
+        if self.image_paths is not None:
+            for path in self.image_paths:
+                if count >= self.number:
+                    break
+                image = cv.imread(path)
+                processed_image = self.preprocess_image(image)
+                loaded_images.append(processed_image)
+                count += 1
+            self.lineup_images = loaded_images
+            return loaded_images
+
+        if self.directory_path is not None:
+            for filename in os.listdir(self.directory_path):
+                if self.is_image_file(filename):
+                    full_path = os.path.join(self.directory_path, filename)
+                    image = cv.imread(full_path)
+                    if image is not None:
+                        processed_image = self.preprocess_image(image)
+                        self.lineup_images.append(processed_image)
+            return self.lineup_images
 
 
 
