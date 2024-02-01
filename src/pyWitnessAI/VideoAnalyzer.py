@@ -577,9 +577,9 @@ class LineupLoader:
         self.directory_path = directory_path
         self.target_size = target_size
         self.lineup_images = []
-        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
-        self.lineup_images = []
-        self.image_paths = None
+        # Add or remove file types as needed
+        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+
         if image_paths is not None:
             self.image_paths = image_paths
             if image_number == 0:
@@ -603,9 +603,7 @@ class LineupLoader:
         count = 0
         loaded_images = []
 
-        if self.directory_path is None:
-            raise ValueError("Directory path must be specified.")
-
+        #  Loading images when paths are specified
         if self.image_paths is not None:
             for path in self.image_paths:
                 if count >= self.number:
@@ -617,6 +615,7 @@ class LineupLoader:
             self.lineup_images = loaded_images
             return loaded_images
 
+        #  Loading images from directory
         if self.directory_path is not None:
             for filename in os.listdir(self.directory_path):
                 if self.is_image_file(filename):
