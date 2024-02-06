@@ -504,6 +504,7 @@ class SimilarityAnalyzer:
     def calculate_similarity_euclidean(self, emb1, emb2):
         return np.linalg.norm(emb1 - emb2)
 
+    @staticmethod
     def calculate_similarity_cosine(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
         dot_product = np.dot(emb1, emb2)
@@ -534,9 +535,10 @@ class LineupLoader:
         self.directory_path = directory_path
         self.target_size = target_size
         self.lineup_images = []
-        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
-        self.lineup_images = []
-        self.image_paths = None
+        # Add or remove file types as needed
+        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+        self.image_paths = image_paths
+
         if image_paths is not None:
             self.image_paths = image_paths
             if image_number == 0:
@@ -560,9 +562,7 @@ class LineupLoader:
         count = 0
         loaded_images = []
 
-        if self.directory_path is None:
-            raise ValueError("Directory path must be specified.")
-
+        #  Loading images when paths are specified
         if self.image_paths is not None:
             for path in self.image_paths:
                 if count >= self.number:
@@ -574,6 +574,7 @@ class LineupLoader:
             self.lineup_images = loaded_images
             return loaded_images
 
+        #  Loading images from directory
         if self.directory_path is not None:
             for filename in os.listdir(self.directory_path):
                 if self.is_image_file(filename):
@@ -584,6 +585,48 @@ class LineupLoader:
                         self.lineup_images.append(processed_image)
             return self.lineup_images
 
+    def compare_faces(self, target_faces, filler_faces, model_name='Facenet', calculate_method='euclidean'):
+        #  Use pre-detected faces for analysis
+        frame_results = []
+        model_name = model_name
+
+        for target_face in target_faces:
+            face_comparisons = []
+
+            embedding_results_target = self.get_embedding(target_face, model_name)
+            emb_target = np.array(embedding_results_target[0]['embedding'])
+
+            for filler_face in filler_faces:
+                embedding_results_filler = self.get_embedding(filler_face, model_name)
+                emb_filler = np.array(embedding_results_filler[0]['embedding'])
+
+                if calculate_method == 'euclidean':
+                    similarity_score = self.calculate_similarity_euclidean(emb_target, emb_filler)
+                    face_comparisons.append(similarity_score)
+                else:
+                    raise ValueError(f"Unsupported detector backend: {calculate_method}")
+
+            frame_results.append(face_comparisons)
+
+        return {
+            'facenet_distance': frame_results
+        }
+
+    def get_embedding(self, face, model_name):
+        #  Generate embedding using FaceNet
+        embedding = DeepFace.represent(face, model_name=model_name, enforce_detection=False)
+        return np.array(embedding)
+
+    def calculate_similarity_euclidean(self, emb1, emb2):
+        return np.linalg.norm(emb1 - emb2)
+
+    def save_data_flattened(self, directory='results', prefix='analyzed_flattened'):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        df = pd.DataFrame(results)
+
+        df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
 
 
