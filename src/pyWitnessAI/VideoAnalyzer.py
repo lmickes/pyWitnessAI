@@ -596,21 +596,19 @@ class LineupLoader:
             embedding_results_target = self.get_embedding(target_face, model_name)
             emb_target = np.array(embedding_results_target[0]['embedding'])
 
-            for filler_face in filler_faces:
+            for j, filler_face in enumerate(filler_faces):
                 embedding_results_filler = self.get_embedding(filler_face, model_name)
                 emb_filler = np.array(embedding_results_filler[0]['embedding'])
 
                 if calculate_method == 'euclidean':
                     similarity_score = self.calculate_similarity_euclidean(emb_target, emb_filler)
-                    face_comparisons.append(similarity_score)
+                    face_comparisons.append({f'similarity_{j}': similarity_score})
                 else:
                     raise ValueError(f"Unsupported detector backend: {calculate_method}")
 
             frame_results.append(face_comparisons)
 
-        return {
-            'facenet_distance': frame_results
-        }
+        return frame_results
 
     def get_embedding(self, face, model_name):
         #  Generate embedding using FaceNet
@@ -620,14 +618,27 @@ class LineupLoader:
     def calculate_similarity_euclidean(self, emb1, emb2):
         return np.linalg.norm(emb1 - emb2)
 
-    def save_data_flattened(self, directory='results', prefix='analyzed_flattened'):
+    def save(self, results, directory='results'):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        df = pd.DataFrame(results)
+        data = results
+        flattened_data = {f'face{i}': [d[f'similarity_{j}'] for d in data[i]] for i in range(len(data)) for j in
+                          range(len(data[i]))}
 
-        df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
+        # Create a DataFrame
+        df = pd.DataFrame(flattened_data)
 
+        # Rename the index to match your requirement
+        df.index = [f'similarity_{i + 1}' for i in range(len(df))]
+
+        # Save to CSV
+        csv_filename = 'similarity_scores.csv'
+        df.to_csv(csv_filename)
+
+        # Save to CSV
+        df.to_csv(os.path.join(directory, csv_filename), index=False)
+        print(f'Data saved to {csv_filename}.')
 
 
 
