@@ -618,26 +618,27 @@ class LineupLoader:
     def calculate_similarity_euclidean(self, emb1, emb2):
         return np.linalg.norm(emb1 - emb2)
 
-    def save(self, results, directory='results'):
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+    def save(self, data, directory='results'):
+        transposed_data = {}
 
-        data = results
-        flattened_data = {f'face{i}': [d[f'similarity_{j}'] for d in data[i]] for i in range(len(data)) for j in
-                          range(len(data[i]))}
+        # Extract data
+        for i in range(len(data[0])):  # Assuming all sublists have the same length
+            transposed_data[f'similarity_{i}'] = [data[j][i][f'similarity_{i}'] for j in range(len(data))]
 
-        # Create a DataFrame
-        df = pd.DataFrame(flattened_data)
+        # Create DataFrame from the dictionary
+        df = pd.DataFrame(transposed_data)
 
-        # Rename the index to match your requirement
-        df.index = [f'similarity_{i + 1}' for i in range(len(df))]
+        # Transpose the DataFrame to get the desired structure
+        df_transposed = df.T
+
+        # Rename the columns to 0, 1, 2, ...
+        df_transposed.columns = [str(i) for i in range(len(data))]
 
         # Save to CSV
         csv_filename = 'similarity_scores.csv'
-        df.to_csv(csv_filename)
 
         # Save to CSV
-        df.to_csv(os.path.join(directory, csv_filename), index=False)
+        df_transposed.to_csv(os.path.join(directory, csv_filename), index=True)
         print(f'Data saved to {csv_filename}.')
 
 
