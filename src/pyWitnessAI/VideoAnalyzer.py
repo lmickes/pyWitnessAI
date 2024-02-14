@@ -16,18 +16,9 @@ from deepface.commons import functions
 
 
 class VideoAnalyzer:
-    def __init__(self, *input_paths):
-        self.input_paths = input_paths
-        self.is_video = len(input_paths) == 1 and input_paths[0].endswith(('.mp4', '.avi', '.mov', '.mkv'))
-
-        if self.is_video:
-            self.video_path = input_paths[0]
-            self.cap = cv.VideoCapture(self.video_path)
-        else:
-            self.frames = [cv.imread(path) for path in input_paths]
-
-        # self.video_path = video_path
-        # self.cap = cv.VideoCapture(video_path)
+    def __init__(self, video_path):
+        self.video_path = video_path
+        self.cap = cv.VideoCapture(video_path)
         self.frame_count = []
         self.frame_width = None
         self.frame_height = None
@@ -50,28 +41,18 @@ class VideoAnalyzer:
         self.frame_processor[processor.name] = processor
 
     def release_resources(self):
-        if self.is_video:
-            self.cap.release()
-            for processor in self.frame_processor.values():
-                if hasattr(processor, 'release'):
-                    processor.release()
-        cv.destroyAllWindows()
+        self.cap.release()
+        for processor in self.frame_processor.values():
+            if hasattr(processor, 'release'):
+                processor.release()
 
     def get_frame_info(self):
         #  Retrieve frame information
-        if self.is_video:
-            self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
-            self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-            self.frame_area = self.frame_width * self.frame_height
-        else:
-            self.frame_width, self.frame_height, _ = self.frames[0].shape
-            self.frame_area = self.frame_width * self.frame_height
+        self.frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        self.frame_area = self.frame_width * self.frame_height
 
     def process_video(self, frame_start=0, frame_end=1000000000):
-        # Skip processing if it's not a video input
-        if not self.is_video:
-            return
-
         #  Process the video frame between frame_start and frame_end
         frame_analyzed = 0
 
@@ -100,28 +81,7 @@ class VideoAnalyzer:
         self.average_value = np.mean(self.average_pixel_values)
         self.frame_analyzed = frame_analyzed
         self.release_resources()
-
-    def process_images(self):
-        if self.is_video:
-            return  # Skip processing if it's a video input
-
-        frame_analyzed = 0
-
-        for frame in self.frames:
-            self.frame_count.append(frame_analyzed)
-            average_pixel_value = int(frame.mean())
-            self.average_pixel_values.append(average_pixel_value)
-
-            for k in self.frame_processor:
-                frame = self.frame_processor[k].process_frame(frame)
-
-            for k in self.frame_analyzer:
-                self.frame_analyzer_output[k].append(self.frame_analyzer[k].analyze_frame(frame))
-
-            frame_analyzed += 1
-
-        self.average_value = np.mean(self.average_pixel_values)
-        self.frame_analyzed = frame_analyzed
+        cv.destroyAllWindows()
 
     def get_analysis_info(self):
         #  Get the number of analyzed frame and total frames
@@ -131,10 +91,7 @@ class VideoAnalyzer:
         }
 
     def run(self, frame_start=0, frame_end=100000):
-        if self.is_video:
-            self.process_video(frame_start, frame_end)
-        else:
-            self.process_images()
+        self.process_video(frame_start, frame_end)
 
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
@@ -547,6 +504,7 @@ class SimilarityAnalyzer:
     def calculate_similarity_euclidean(self, emb1, emb2):
         return np.linalg.norm(emb1 - emb2)
 
+    @staticmethod
     def calculate_similarity_cosine(self, emb1, emb2):
         #  return np.linalg.norm(emb1 - emb2) #  L2 norm
         dot_product = np.dot(emb1, emb2)
@@ -577,9 +535,11 @@ class LineupLoader:
         self.directory_path = directory_path
         self.target_size = target_size
         self.lineup_images = []
-        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']  # Add or remove file types as needed
-        self.lineup_images = []
-        self.image_paths = None
+        # Add or remove file types as needed
+        self.image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+        self.image_paths = image_paths
+        self.file_names = []
+
         if image_paths is not None:
             self.image_paths = image_paths
             if image_number == 0:
@@ -603,22 +563,28 @@ class LineupLoader:
         count = 0
         loaded_images = []
 
-        if self.directory_path is None:
-            raise ValueError("Directory path must be specified.")
-
+        #  Loading images when paths are specified
         if self.image_paths is not None:
             for path in self.image_paths:
                 if count >= self.number:
                     break
                 image = cv.imread(path)
                 processed_image = self.preprocess_image(image)
-                loaded_images.append(processed_image)
+                self.lineup_images.append(processed_image)
                 count += 1
-            self.lineup_images = loaded_images
-            return loaded_images
+            return self.lineup_images
 
+        #  Loading images from directory
+        # Loading images from directory
         if self.directory_path is not None:
-            for filename in os.listdir(self.directory_path):
+            # Retrieve and sort the list of filenames
+            filenames = os.listdir(self.directory_path)
+            self.file_names = filenames
+            # print(self.file_names)
+            # Sort filenames alphabetically, case-insensitive
+            sorted_filenames = sorted(self.file_names, key=lambda x: x.lower())
+
+            for filename in sorted_filenames:
                 if self.is_image_file(filename):
                     full_path = os.path.join(self.directory_path, filename)
                     image = cv.imread(full_path)
@@ -627,10 +593,64 @@ class LineupLoader:
                         self.lineup_images.append(processed_image)
             return self.lineup_images
 
+    def compare_faces(self, target_faces, filler_faces, model_name='Facenet', calculate_method='euclidean'):
+        #  Use pre-detected faces for analysis
+        frame_results = []
+        model_name = model_name
 
+        for target_face in target_faces:
+            face_comparisons = []
 
+            embedding_results_target = self.get_embedding(target_face, model_name)
+            emb_target = np.array(embedding_results_target[0]['embedding'])
 
+            for j, filler_face in enumerate(filler_faces):
+                embedding_results_filler = self.get_embedding(filler_face, model_name)
+                emb_filler = np.array(embedding_results_filler[0]['embedding'])
 
+                if calculate_method == 'euclidean':
+                    similarity_score = self.calculate_similarity_euclidean(emb_target, emb_filler)
+                    face_comparisons.append({f'similarity_{j}': similarity_score})
+                else:
+                    raise ValueError(f"Unsupported detector backend: {calculate_method}")
+
+            frame_results.append(face_comparisons)
+
+        return frame_results
+
+    def get_embedding(self, face, model_name):
+        #  Generate embedding using FaceNet
+        embedding = DeepFace.represent(face, model_name=model_name, enforce_detection=False)
+        return np.array(embedding)
+
+    def calculate_similarity_euclidean(self, emb1, emb2):
+        return np.linalg.norm(emb1 - emb2)
+
+    def save(self, data, directory='results', column_name=None):
+        transposed_data = {}
+
+        # Extract data
+        for i,m in zip(range(len(data[0])), self.file_names):  # Assuming all sublists have the same length
+            transposed_data[f'similarity_{m}'] = [data[j][i][f'similarity_{i}'] for j in range(len(data))]
+
+        # Create DataFrame from the dictionary
+        df = pd.DataFrame(transposed_data)
+
+        # Transpose the DataFrame to get the desired structure
+        df_transposed = df.T
+
+        # Rename the columns to 0, 1, 2, ...
+        # df_transposed.columns = [str(i) for i in range(len(data))]
+        df_transposed.columns = [str(i) for i in column_name]
+
+        # Save to CSV
+        csv_filename = 'similarity_scores.csv'
+
+        # Save to CSV
+        df_transposed.to_csv(os.path.join(directory, csv_filename), index=True)
+        print(f'Data saved to {csv_filename}.')
+
+    
 
 
 
