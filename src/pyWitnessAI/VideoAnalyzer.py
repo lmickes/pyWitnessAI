@@ -96,7 +96,7 @@ class VideoAnalyzer:
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
         for k, output in self.frame_analyzer_output.items():
-            if k == "lineup":
+            if k == "similarity":
                 continue
             # print(k)  # mtcnn, opencv, similarity
             # print(output)  #  Their output
@@ -119,7 +119,7 @@ class VideoAnalyzer:
     def plot_face_areas(self):
         #  Plots the face area recognized by the classifiers against frame numbers
         for k, output in self.frame_analyzer_output.items():
-            if k == "lineup":
+            if k == "similarity":
                 continue
             face_areas = []
             for data in output:
