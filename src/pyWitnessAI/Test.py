@@ -12,15 +12,15 @@ def test():
     opencv_analyzer = FrameAnalyzerOpenCV()
     analyzer.add_analyzer(mtcnn_analyzer)
     analyzer.add_analyzer(opencv_analyzer)
+    display_processor = FrameProcessorDisplayer()
+    analyzer.add_processor(display_processor)
 
     #  Load the lineup
-    lineup_loader = LineupLoader(
-                                 image_path=['E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien99.jpg',
-                                             'E:/Project.Pycharm/FaceDetection/Assessment/Lineup/Damien1999.jpg'])
+    lineup_loader = LineupLoader(directory_path='D:/MscPsy/Data/Colloff2021/TargetFace')
     lineup = lineup_loader.load_image()
 
     #  Comparison of lineup faces with faces in the video
-    similarity_analyzer = SimilarityAnalyzer(lineup_images=lineup, face_detector="mtcnn")
+    similarity_analyzer = SimilarityAnalyzer(lineup_faces=lineup, detector=mtcnn_analyzer)
     analyzer.add_analyzer(similarity_analyzer)
 
     analyzer.run(0, 10)

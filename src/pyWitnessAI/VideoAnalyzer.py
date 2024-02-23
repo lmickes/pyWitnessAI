@@ -356,7 +356,7 @@ class FrameProcessorDisplayer:
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
         self.name = name
 
-    def process_video(self, frame):
+    def process_frame(self, frame):
         cv.imshow(self.window_name, frame)
         if cv.waitKey(1) & 0xFF == ord('q'):
             raise Exception('User interrupted video display.')
