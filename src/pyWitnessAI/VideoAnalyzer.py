@@ -351,13 +351,30 @@ class FrameProcessorVideoWriter:
 
 
 class FrameProcessorDisplayer:
-    def __init__(self, window_name='processed Video', name='displayer'):
+    def __init__(self, window_name='processed Video', name='displayer', box = 'False'):
         self.window_name = window_name
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
         self.name = name
+        self.bounding_box = box
+
+    def plot_rectangle(self, frame, faces):
+        # There are 4 values in face array, x,y,h(eight),w(idth)
+        for (x, y, w, h) in faces:
+            cv.rectangle(frame, (x, y), (x + w, y + h), (36, 255, 12), 2)
+        return frame
 
     def process_frame(self, frame):
-        cv.imshow(self.window_name, frame)
+        if self.bounding_box == 'True':
+            detector_Haar = cv.CascadeClassifier(
+                'E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml')
+            GRAY = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+            # Face detection
+            faces_Haar = detector_Haar.detectMultiScale(GRAY, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            img_bbox = self.plot_rectangle(frame.copy(), faces_Haar)
+            cv.imshow(self.window_name, img_bbox)
+        else:
+            cv.imshow(self.window_name, frame)
+
         if cv.waitKey(1) & 0xFF == ord('q'):
             raise Exception('User interrupted video display.')
 

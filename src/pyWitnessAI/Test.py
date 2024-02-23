@@ -12,7 +12,7 @@ def test():
     opencv_analyzer = FrameAnalyzerOpenCV()
     analyzer.add_analyzer(mtcnn_analyzer)
     analyzer.add_analyzer(opencv_analyzer)
-    display_processor = FrameProcessorDisplayer()
+    display_processor = FrameProcessorDisplayer(box='True')
     analyzer.add_processor(display_processor)
 
     #  Load the lineup
@@ -23,7 +23,7 @@ def test():
     similarity_analyzer = SimilarityAnalyzer(lineup_faces=lineup, detector=mtcnn_analyzer)
     analyzer.add_analyzer(similarity_analyzer)
 
-    analyzer.run(0, 10)
+    analyzer.run(0, 130)
 
     print(analyzer.get_analysis_info())
 
