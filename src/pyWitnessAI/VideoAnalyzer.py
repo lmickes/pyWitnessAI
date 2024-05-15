@@ -158,6 +158,9 @@ class VideoAnalyzer:
                 print(f"Failed to retrieve frame at frame number: {frame_number}")
 
     def print_frame(self, frame_number, window_name="Frame"):
+        # Reinitialize the video capture to ensure frames can be accessed correctly
+        self.cap = cv.VideoCapture(self.video_path)
+
         self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = self.cap.read()
         if ret:
