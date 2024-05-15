@@ -404,6 +404,7 @@ class FrameAnalyzerMTCNN:
         }
         self.detected_faces.append(frame_results)
         confidence = self.get_confidence(faces)
+        average_confidence = np.mean(confidence) if confidence else 0  # Calculate the average confidence
         face_count = len(faces)
         face_area = self.get_face_area(faces)
         coordinates = self.get_face_coordinates(faces)
@@ -413,6 +414,7 @@ class FrameAnalyzerMTCNN:
             f'face_count': face_count,
             f'face_area': face_area,
             f'confidence': confidence,
+            f'average_confidence': average_confidence,  # Add average confidence to the output
             f'coordinates': coordinates
         }
 
