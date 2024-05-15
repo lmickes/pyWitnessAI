@@ -101,18 +101,21 @@ class VideoAnalyzer:
             print("MTCNN analyzer is not added.")
             return []
 
-        frames_confidence = []
+        frames_metric = []
         for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
+            face_area = frame_data.get('face_area', 0)
             average_confidence = frame_data.get('average_confidence', 0)
-            frames_confidence.append((average_confidence, self.frame_count[i]))
+            metric = face_area * average_confidence  # Combined metric
+            frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
 
         # Get the top N frames with the highest average confidence
-        top_frames = heapq.nlargest(top_n, frames_confidence, key=lambda x: x[0])
+        top_frames = heapq.nlargest(top_n, frames_metric, key=lambda x: x[0])
 
         self.top_frames = top_frames
         with open(log_file, 'w') as f:
-            for avg_conf, frame_num in top_frames:
-                log_message = f"Probe frame at frame number: {frame_num} with average confidence: {avg_conf}\n"
+            for metric, frame_num, face_area, avg_conf in top_frames:
+                log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
+                               f"(face_area: {face_area}, avg_confidence: {avg_conf})\n")
                 print(log_message.strip())
                 f.write(log_message)
 
