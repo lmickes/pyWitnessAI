@@ -32,6 +32,8 @@ class VideoAnalyzer:
         self.frame_analyzed = 0
         self.frame_total = 0
 
+        self.probe_frame_number = None  # An attribute to get the best quality frame
+
     def add_analyzer(self, analyzer):
         #  Add an external frame analyzer
         self.frame_analyzer[analyzer.name] = analyzer
@@ -99,22 +101,38 @@ class VideoAnalyzer:
             return None
 
         max_confidence = -1
-        probe_frame = None
+        probe_frame_index = None
         probe_frame_number = -1
 
         for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
             average_confidence = frame_data.get('average_confidence', 0)
             if average_confidence > max_confidence:
                 max_confidence = average_confidence
-                probe_frame = i
+                probe_frame_index = i
                 probe_frame_number = self.frame_count[i]
 
-        if probe_frame is not None:
+        self.probe_frame_number = probe_frame_number
+
+        if probe_frame_index is not None:
             print(f"Probe frame found at frame number: {probe_frame_number} with average confidence: {max_confidence}")
         else:
             print("No probe frame found.")
 
         return probe_frame_number
+
+    def print_probe_frame(self, frame_number):
+        if self.probe_frame_number is not None:
+            frame_number = self.probe_frame_number
+        else:
+            frame_number = frame_number
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = self.cap.read()
+        if ret:
+            cv.imshow("Probe Frame", frame)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
+        else:
+            print(f"Failed to retrieve frame at frame number: {frame_number}")
 
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
