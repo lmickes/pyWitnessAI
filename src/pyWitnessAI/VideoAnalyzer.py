@@ -9,6 +9,7 @@ from keras.models import load_model
 from importlib.resources import files
 from .DataFlattener import *
 from PIL import Image
+import heapq
 from deepface import DeepFace
 import dlib
 from deepface.commons import functions
@@ -32,7 +33,7 @@ class VideoAnalyzer:
         self.frame_analyzed = 0
         self.frame_total = 0
 
-        self.probe_frame_number = None  # An attribute to get the best quality frame
+        self.top_frames = None  # An attribute to get the best quality frame
 
     def add_analyzer(self, analyzer):
         #  Add an external frame analyzer
@@ -95,44 +96,54 @@ class VideoAnalyzer:
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
-    def find_probe_frame(self):
+    def find_probe_frames(self, top_n=1):
         if 'mtcnn' not in self.frame_analyzer_output:
             print("MTCNN analyzer is not added.")
-            return None
+            return []
 
-        max_confidence = -1
-        probe_frame_index = None
-        probe_frame_number = -1
-
+        frames_confidence = []
         for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
             average_confidence = frame_data.get('average_confidence', 0)
-            if average_confidence > max_confidence:
-                max_confidence = average_confidence
-                probe_frame_index = i
-                probe_frame_number = self.frame_count[i]
+            frames_confidence.append((average_confidence, self.frame_count[i]))
 
-        self.probe_frame_number = probe_frame_number
+        # Get the top N frames with the highest average confidence
+        top_frames = heapq.nlargest(top_n, frames_confidence, key=lambda x: x[0])
 
-        if probe_frame_index is not None:
-            print(f"Probe frame found at frame number: {probe_frame_number} with average confidence: {max_confidence}")
+        self.top_frames = top_frames
+        for avg_conf, frame_num in top_frames:
+            print(f"Probe frame at frame number: {frame_num} with average confidence: {avg_conf}")
+
+        return top_frames
+
+    def print_probe_frames(self, top_frames):
+        if self.top_frames is not None:
+            top_frames = top_frames
         else:
-            print("No probe frame found.")
+            top_frames = top_frames
 
-        return probe_frame_number
+        for i, (_, frame_number) in enumerate(top_frames):
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = self.cap.read()
+            if ret:
+                cv.imshow(f"Probe Frame {i+1}", frame)
+                cv.waitKey(0)
+                cv.destroyAllWindows()
+            else:
+                print(f"Failed to retrieve frame at frame number: {frame_number}")
 
-    def print_probe_frame(self, frame_number):
-        if self.probe_frame_number is not None:
-            frame_number = self.probe_frame_number
-        else:
-            frame_number = frame_number
-        self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
-        ret, frame = self.cap.read()
-        if ret:
-            cv.imshow("Probe Frame", frame)
-            cv.waitKey(0)
-            cv.destroyAllWindows()
-        else:
-            print(f"Failed to retrieve frame at frame number: {frame_number}")
+    def save_probe_frames(self, top_frames, save_directory='probe_frames'):
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        for i, (_, frame_number) in enumerate(top_frames):
+            self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = self.cap.read()
+            if ret:
+                save_path = os.path.join(save_directory, f'probe_frame_{i+1}.jpg')
+                cv.imwrite(save_path, frame)
+                print(f"Probe frame {i+1} saved at {save_path}")
+            else:
+                print(f"Failed to retrieve frame at frame number: {frame_number}")
 
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
