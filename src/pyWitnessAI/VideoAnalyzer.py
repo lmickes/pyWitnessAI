@@ -93,6 +93,29 @@ class VideoAnalyzer:
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
+    def find_probe_frame(self):
+        if 'mtcnn' not in self.frame_analyzer_output:
+            print("MTCNN analyzer is not added.")
+            return None
+
+        max_confidence = -1
+        probe_frame = None
+        probe_frame_number = -1
+
+        for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
+            average_confidence = frame_data.get('average_confidence', 0)
+            if average_confidence > max_confidence:
+                max_confidence = average_confidence
+                probe_frame = i
+                probe_frame_number = self.frame_count[i]
+
+        if probe_frame is not None:
+            print(f"Probe frame found at frame number: {probe_frame_number} with average confidence: {max_confidence}")
+        else:
+            print("No probe frame found.")
+
+        return probe_frame_number
+
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
         for k, output in self.frame_analyzer_output.items():
