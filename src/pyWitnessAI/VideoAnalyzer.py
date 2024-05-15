@@ -147,7 +147,7 @@ class VideoAnalyzer:
         # Reinitialize the video capture to ensure frames can be accessed correctly
         self.cap = cv.VideoCapture(self.video_path)
 
-        for i, (_, frame_number) in enumerate(top_frames):
+        for i, (_, frame_number, _, _) in enumerate(top_frames):
             self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
             ret, frame = self.cap.read()
             if ret:
