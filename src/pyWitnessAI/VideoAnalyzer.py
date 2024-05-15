@@ -96,7 +96,7 @@ class VideoAnalyzer:
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
-    def find_probe_frames(self, top_n=1):
+    def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt'):
         if 'mtcnn' not in self.frame_analyzer_output:
             print("MTCNN analyzer is not added.")
             return []
@@ -110,8 +110,11 @@ class VideoAnalyzer:
         top_frames = heapq.nlargest(top_n, frames_confidence, key=lambda x: x[0])
 
         self.top_frames = top_frames
-        for avg_conf, frame_num in top_frames:
-            print(f"Probe frame at frame number: {frame_num} with average confidence: {avg_conf}")
+        with open(log_file, 'w') as f:
+            for avg_conf, frame_num in top_frames:
+                log_message = f"Probe frame at frame number: {frame_num} with average confidence: {avg_conf}\n"
+                print(log_message.strip())
+                f.write(log_message)
 
         return top_frames
 
