@@ -154,6 +154,16 @@ class VideoAnalyzer:
             else:
                 print(f"Failed to retrieve frame at frame number: {frame_number}")
 
+    def print_frame(self, frame_number, window_name="Frame"):
+        self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = self.cap.read()
+        if ret:
+            cv.imshow(window_name, frame)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
+        else:
+            print(f"Failed to retrieve frame at frame number: {frame_number}")
+
     def plot_face_counts(self):
         #  Plots the number of faces against frame numbers
         for k, output in self.frame_analyzer_output.items():
