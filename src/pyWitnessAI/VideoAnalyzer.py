@@ -116,6 +116,9 @@ class VideoAnalyzer:
         return top_frames
 
     def print_probe_frames(self, top_frames):
+        # Reinitialize the video capture to ensure frames can be accessed correctly
+        self.cap = cv.VideoCapture(self.video_path)
+
         if self.top_frames is not None:
             top_frames = top_frames
         else:
@@ -134,6 +137,9 @@ class VideoAnalyzer:
     def save_probe_frames(self, top_frames, save_directory='probe_frames'):
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
+
+        # Reinitialize the video capture to ensure frames can be accessed correctly
+        self.cap = cv.VideoCapture(self.video_path)
 
         for i, (_, frame_number) in enumerate(top_frames):
             self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
