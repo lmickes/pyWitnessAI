@@ -30,6 +30,7 @@ legend_colors = {
 line_styles = {
     'mtcnn': '-',
     'opencv': '--',
-    'lineup': '-.'
+    'lineup': '-.',
+    'deepface': '--',
 }
 
