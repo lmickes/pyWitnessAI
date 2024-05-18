@@ -97,12 +97,12 @@ class VideoAnalyzer:
         self.process_video(frame_start, frame_end)
 
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt'):
-        if 'mtcnn' not in self.frame_analyzer_output:
-            print("MTCNN analyzer is not added.")
+        if 'deepface' not in self.frame_analyzer_output:
+            print("deepface analyzer is not added.")
             return []
 
         frames_metric = []
-        for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
+        for i, frame_data in enumerate(self.frame_analyzer_output['deepface']):
             face_area = frame_data.get('face_area', 0)
             average_confidence = frame_data.get('average_confidence', 0)
             metric = face_area * average_confidence  # Combined metric
@@ -545,6 +545,68 @@ class FrameAnalyzerOpenCV:
         for (x, y, w, h) in faces:
             coordinates.append([x, y, w, h])
         return coordinates
+
+
+class FrameAnalyzerDeepface:
+    def __init__(self, name='deepface', detector_backend='mtcnn'):
+        self.detect_backend = detector_backend
+        self.name = name
+
+    def analyze_frame(self, frame):
+        try:
+            detections = DeepFace.extract_faces(frame, detector_backend=self.detect_backend, enforce_detection=False)
+        except ValueError:
+            return {
+                'face_count': 0,
+                'face_area': 0,
+                'average_confidence': 0,
+                'embeddings': [],
+                'coordinates': []
+            }
+
+        if detections is None or len(detections) == 0:
+            return {
+                'face_count': 0,
+                'face_area': 0,
+                'average_confidence': 0,
+                'coordinates': []
+            }
+
+        embeddings = []
+        confidences = []
+        coordinates = []
+        face_area_sum = 0
+
+        for detection in detections:
+            # Extract the bounding box coordinates
+            if isinstance(detection, dict) and 'facial_area' in detection:
+                x, y, w, h = detection['facial_area']['x'], detection['facial_area']['y'], \
+                    detection['facial_area']['w'], detection['facial_area']['h']
+            else:
+                continue
+
+            # Calculate face area
+            face_area = w * h
+            face_area_sum += face_area
+
+            # Extract face embedding
+            face_img = detection['face']
+
+            # Simulate a confidence score (1.0 as a placeholder)
+            confidence = 1.0
+            confidences.append(confidence)
+
+            # Add face coordinates
+            coordinates.append((x, y, w, h))
+
+        average_confidence = np.mean(confidences) if confidences else 0
+
+        return {
+            'face_count': len(detections),
+            'face_area': face_area_sum,
+            'average_confidence': average_confidence,
+            'coordinates': coordinates
+        }
 
 
 class SimilarityAnalyzer:

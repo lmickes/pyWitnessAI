@@ -22,6 +22,7 @@ legend_colors = {
     'mean': colors['green'],
     'mtcnn': colors['blue'],
     'opencv': colors['red'],
+    'deepface': colors['magenta'],
     'lineup': colors['gray']
 
 }
