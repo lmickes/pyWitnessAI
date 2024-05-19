@@ -207,7 +207,7 @@ class VideoAnalyzer:
             plt.plot(self.frame_count, face_areas, label=k, linestyle=line_styles[k], color=legend_colors[k])
 
         plt.xlabel('Frame')
-        plt.ylim(0, 0.5)
+        plt.ylim(0, 1.0)
         plt.ylabel('Face Area Ratio')
         plt.title('Face Area Ratio vs Frame Number')
         plt.legend()
