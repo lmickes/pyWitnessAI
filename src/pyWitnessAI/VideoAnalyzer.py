@@ -480,6 +480,24 @@ class FrameProcessorNoiseReduction:
         return cv.fastNlMeansDenoisingColored(frame, None, 10, 10, 7, 21)
 
 
+class FrameProcessorGammaCorrection:
+    def __init__(self, gamma=1.0, name='gamma_correction'):
+        self.gamma = gamma
+        self.name = name
+        self.inv_gamma = 1.0 / gamma
+        self.table = np.array([((i / 255.0) ** self.inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+
+    def process_frame(self, frame):
+        return cv.LUT(frame, self.table)
+
+
+class FrameProcessorSharpening:
+    def __init__(self, name='sharpening'):
+        self.name = name
+
+    def process_frame(self, frame):
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+        return cv.filter2D(frame, -1, kernel)
 
 
 class FrameAnalyzerMTCNN:
