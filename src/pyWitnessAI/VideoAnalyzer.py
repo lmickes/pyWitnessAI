@@ -461,6 +461,18 @@ class FrameProcessorDisplayer:
         cv.destroyWindow(self.window_name)
 
 
+class FrameProcessorHistogramEqualization:
+    def __init__(self, name='histogram_equalization'):
+        self.name = name
+
+    def process_frame(self, frame):
+        img_yuv = cv.cvtColor(frame, cv.COLOR_BGR2YUV)
+        img_yuv[:, :, 0] = cv.equalizeHist(img_yuv[:, :, 0])
+        img_output = cv.cvtColor(img_yuv, cv.COLOR_YUV2BGR)
+        return img_output
+
+
+
 class FrameAnalyzerMTCNN:
     def __init__(self, name="mtcnn"):
         self.detector = MTCNN()
