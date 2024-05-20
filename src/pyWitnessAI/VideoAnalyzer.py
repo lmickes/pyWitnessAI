@@ -472,6 +472,15 @@ class FrameProcessorHistogramEqualization:
         return img_output
 
 
+class FrameProcessorNoiseReduction:
+    def __init__(self, name='noise_reduction'):
+        self.name = name
+
+    def process_frame(self, frame):
+        return cv.fastNlMeansDenoisingColored(frame, None, 10, 10, 7, 21)
+
+
+
 
 class FrameAnalyzerMTCNN:
     def __init__(self, name="mtcnn"):
