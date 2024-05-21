@@ -97,12 +97,12 @@ class VideoAnalyzer:
         self.process_video(frame_start, frame_end)
 
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt'):
-        if 'deepface' not in self.frame_analyzer_output:
-            print("deepface analyzer is not added.")
+        if 'mtcnn' not in self.frame_analyzer_output:
+            print("mtcnn analyzer is not added.")
             return []
 
         frames_metric = []
-        for i, frame_data in enumerate(self.frame_analyzer_output['deepface']):
+        for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
             face_area = frame_data.get('face_area', 0)
             average_confidence = frame_data.get('average_confidence', 0)
             metric = face_area * average_confidence  # Combined metric
