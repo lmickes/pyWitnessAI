@@ -461,6 +461,7 @@ class FrameProcessorDisplayer:
         cv.destroyWindow(self.window_name)
 
 
+# Enhance the contrast of the image
 class FrameProcessorHistogramEqualization:
     def __init__(self, name='histogram_equalization'):
         self.name = name
@@ -472,6 +473,7 @@ class FrameProcessorHistogramEqualization:
         return img_output
 
 
+# Reduce noise that might interfere with face detection
 class FrameProcessorNoiseReduction:
     def __init__(self, name='noise_reduction'):
         self.name = name
@@ -480,6 +482,7 @@ class FrameProcessorNoiseReduction:
         return cv.fastNlMeansDenoisingColored(frame, None, 10, 10, 7, 21)
 
 
+# Adjust the brightness of the image
 class FrameProcessorGammaCorrection:
     def __init__(self, gamma=1.0, name='gamma_correction'):
         self.gamma = gamma
@@ -491,6 +494,7 @@ class FrameProcessorGammaCorrection:
         return cv.LUT(frame, self.table)
 
 
+# Enhance the edges in the image, making faces more distinguishable
 class FrameProcessorSharpening:
     def __init__(self, name='sharpening'):
         self.name = name
