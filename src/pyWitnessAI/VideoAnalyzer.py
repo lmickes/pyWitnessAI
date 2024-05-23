@@ -96,17 +96,42 @@ class VideoAnalyzer:
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
-    def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt'):
-        if 'mtcnn' not in self.frame_analyzer_output:
-            print("mtcnn analyzer is not added.")
-            return []
-
+    def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn'):
         frames_metric = []
-        for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
-            face_area = frame_data.get('face_area', 0)
-            average_confidence = frame_data.get('average_confidence', 0)
-            metric = face_area * average_confidence  # Combined metric
-            frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+
+        if detector == 'mtcnn':
+            if 'mtcnn' not in self.frame_analyzer_output:
+                print("mtcnn analyzer is not added.")
+                return []
+
+            for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
+                face_area = frame_data.get('face_area', 0)
+                average_confidence = frame_data.get('average_confidence', 0)
+                metric = face_area * average_confidence  # Combined metric
+                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+
+        if detector == 'deepface':
+
+            if 'deepface' not in self.frame_analyzer_output:
+                print("deepface analyzer is not added.")
+                return []
+
+            for i, frame_data in enumerate(self.frame_analyzer_output['deepface']):
+                face_area = frame_data.get('face_area', 0)
+                average_confidence = frame_data.get('average_confidence', 0)
+                metric = face_area * average_confidence  # Combined metric
+                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+
+        if detector == 'opencv':
+            if 'opencv' not in self.frame_analyzer_output:
+                print("opencv analyzer is not added.")
+                return []
+
+            for i, frame_data in enumerate(self.frame_analyzer_output['opencv']):
+                face_area = frame_data.get('face_area', 0)
+                average_confidence = frame_data.get('average_confidence', 0)
+                metric = face_area * average_confidence  # Combined metric
+                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
 
         # Get the top N frames with the highest average confidence
         top_frames = heapq.nlargest(top_n, frames_metric, key=lambda x: x[0])
@@ -572,11 +597,15 @@ class FrameAnalyzerOpenCV:
         face_count = len(faces)
         face_area = self.get_face_area(faces)
         face_coordinates = self.get_face_coordinates(faces)
+        confidence = 1.0 if faces else 0
+        average_confidence = np.mean(confidence) if confidence else 0
 
         return {
             f'face_count': face_count,
             f'face_area': face_area,
-            f'coordinates': face_coordinates
+            f'coordinates': face_coordinates,
+            f'confidence': confidence,
+            f'average_confidence': average_confidence
         }
 
     def get_face_area(self, faces):
