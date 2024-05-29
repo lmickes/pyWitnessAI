@@ -96,8 +96,9 @@ class VideoAnalyzer:
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
 
-    def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn'):
+    def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='deepface', method='metrics'):
         frames_metric = []
+        frames_confidence = []
 
         if detector == 'mtcnn':
             if 'mtcnn' not in self.frame_analyzer_output:
@@ -109,6 +110,7 @@ class VideoAnalyzer:
                 average_confidence = frame_data.get('average_confidence', 0)
                 metric = face_area * average_confidence  # Combined metric
                 frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+                frames_confidence.append((average_confidence, self.frame_count[i]))
 
         if detector == 'deepface':
 
@@ -121,6 +123,7 @@ class VideoAnalyzer:
                 average_confidence = frame_data.get('average_confidence', 0)
                 metric = face_area * average_confidence  # Combined metric
                 frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+                frames_confidence.append((average_confidence, self.frame_count[i]))
 
         if detector == 'opencv':
             if 'opencv' not in self.frame_analyzer_output:
@@ -132,9 +135,15 @@ class VideoAnalyzer:
                 average_confidence = frame_data.get('average_confidence', 0)
                 metric = face_area * average_confidence  # Combined metric
                 frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
+                frames_confidence.append((average_confidence, self.frame_count[i]))
 
         # Get the top N frames with the highest average confidence
-        top_frames = heapq.nlargest(top_n, frames_metric, key=lambda x: x[0])
+        if method == 'confidence':
+            top_frames = heapq.nlargest(top_n, frames_confidence, key=lambda x: x[0])
+
+        # Get the top N frames with the highest average confidence
+        if method == 'metrics':
+            top_frames = heapq.nlargest(top_n, frames_metric, key=lambda x: x[0])
 
         self.top_frames = top_frames
         with open(log_file, 'w') as f:
@@ -623,59 +632,40 @@ class FrameAnalyzerDeepface:
     def __init__(self, name='deepface', detector_backend='mtcnn'):
         self.detect_backend = detector_backend
         self.name = name
+        self.detected_faces = []
 
     def analyze_frame(self, frame):
-        try:
-            detections = DeepFace.extract_faces(frame, detector_backend=self.detect_backend, enforce_detection=False)
-        except ValueError:
-            return {
-                'face_count': 0,
-                'face_area': 0,
-                'average_confidence': 0,
-                'embeddings': [],
-                'coordinates': []
-            }
+        faces = DeepFace.extract_faces(frame, detector_backend=self.detect_backend, enforce_detection=False)
 
-        if detections is None or len(detections) == 0:
-            return {
-                'face_count': 0,
-                'face_area': 0,
-                'average_confidence': 0,
-                'coordinates': []
-            }
-
-        embeddings = []
         confidences = []
         coordinates = []
         face_area_sum = 0
 
-        for detection in detections:
+        for face in faces:
             # Extract the bounding box coordinates
-            if isinstance(detection, dict) and 'facial_area' in detection:
-                x, y, w, h = detection['facial_area']['x'], detection['facial_area']['y'], \
-                    detection['facial_area']['w'], detection['facial_area']['h']
-            else:
-                continue
+            x, y, w, h = face['facial_area']['x'], face['facial_area']['y'], \
+                         face['facial_area']['w'], face['facial_area']['h']
 
             # Calculate face area
             face_area = w * h
             face_area_sum += face_area
 
             # Extract face embedding
-            face_img = detection['face']
+            face_img = face['face']
 
-            # Simulate a confidence score (1.0 as a placeholder)
-            confidence = 1.0
+            # Extract face confidence score
+            confidence = face['confidence']
             confidences.append(confidence)
 
             # Add face coordinates
-            coordinates.append((x, y, w, h))
+            coordinates.append(face['facial_area'])
 
         average_confidence = np.mean(confidences) if confidences else 0
 
         return {
-            'face_count': len(detections),
+            'face_count': len(faces),
             'face_area': face_area_sum,
+            'confidence': confidences,
             'average_confidence': average_confidence,
             'coordinates': coordinates
         }
