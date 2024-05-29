@@ -100,79 +100,53 @@ class VideoAnalyzer:
         frames_metric = []
         frames_confidence = []
 
-        if detector == 'mtcnn':
-            if 'mtcnn' not in self.frame_analyzer_output:
-                print("mtcnn analyzer is not added.")
-                return []
+        if detector in self.frame_analyzer_output:
+            analyzer_output = self.frame_analyzer_output[detector]
 
-            for i, frame_data in enumerate(self.frame_analyzer_output['mtcnn']):
+            for i, frame_data in enumerate(analyzer_output):
                 face_area = frame_data.get('face_area', 0)
                 average_confidence = frame_data.get('average_confidence', 0)
                 metric = face_area * average_confidence  # Combined metric
                 frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
                 frames_confidence.append((average_confidence, self.frame_count[i]))
 
-        if detector == 'deepface':
+        else:
+            print(f"{detector} analyzer is not added.")
+            return []
 
-            if 'deepface' not in self.frame_analyzer_output:
-                print("deepface analyzer is not added.")
-                return []
-
-            for i, frame_data in enumerate(self.frame_analyzer_output['deepface']):
-                face_area = frame_data.get('face_area', 0)
-                average_confidence = frame_data.get('average_confidence', 0)
-                metric = face_area * average_confidence  # Combined metric
-                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
-                frames_confidence.append((average_confidence, self.frame_count[i]))
-
-        if detector == 'opencv':
-            if 'opencv' not in self.frame_analyzer_output:
-                print("opencv analyzer is not added.")
-                return []
-
-            for i, frame_data in enumerate(self.frame_analyzer_output['opencv']):
-                face_area = frame_data.get('face_area', 0)
-                average_confidence = frame_data.get('average_confidence', 0)
-                metric = face_area * average_confidence  # Combined metric
-                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
-                frames_confidence.append((average_confidence, self.frame_count[i]))
-
-        # Get the top N frames with the highest average confidence
+        # Select top frames based on the specified method
         if method == 'confidence':
             top_frames = heapq.nlargest(top_n, frames_confidence, key=lambda x: x[0])
-
-        # Get the top N frames with the highest average confidence
-        if method == 'metrics':
+        elif method == 'metrics':
             top_frames = heapq.nlargest(top_n, frames_metric, key=lambda x: x[0])
+        else:
+            print(f"Unknown method: {method}. Please use 'confidence' or 'metrics'.")
+            return []
 
         self.top_frames = top_frames
+
         with open(log_file, 'w') as f:
-            for metric, frame_num, face_area, avg_conf in top_frames:
-                log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
-                               f"(face_area: {face_area}, avg_confidence: {avg_conf})\n")
+            for frame in top_frames:
+                if method == 'confidence':
+                    avg_conf, frame_num = frame
+                    log_message = f"Probe frame at frame number: {frame_num} with avg_confidence: {avg_conf}\n"
+                elif method == 'metrics':
+                    metric, frame_num, face_area, avg_conf = frame
+                    log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
+                                   f"(face_area: {face_area}, avg_confidence: {avg_conf})\n")
+
                 print(log_message.strip())
                 f.write(log_message)
 
         return top_frames
 
     def print_probe_frames(self, top_frames):
-        # Reinitialize the video capture to ensure frames can be accessed correctly
-        self.cap = cv.VideoCapture(self.video_path)
-
-        if self.top_frames is not None:
-            top_frames = top_frames
-        else:
-            top_frames = top_frames
-
-        for i, (_, frame_number) in enumerate(top_frames):
-            self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
-            ret, frame = self.cap.read()
-            if ret:
-                cv.imshow(f"Probe Frame {i+1}", frame)
-                cv.waitKey(0)
-                cv.destroyAllWindows()
+        for i, frame in enumerate(top_frames):
+            if len(frame) == 2:
+                _, frame_number = frame
             else:
-                print(f"Failed to retrieve frame at frame number: {frame_number}")
+                _, frame_number, _, _ = frame
+            self.print_frame(frame_number, f"Probe Frame {i+1}")
 
     def save_probe_frames(self, top_frames, save_directory='probe_frames'):
         if not os.path.exists(save_directory):
@@ -181,7 +155,11 @@ class VideoAnalyzer:
         # Reinitialize the video capture to ensure frames can be accessed correctly
         self.cap = cv.VideoCapture(self.video_path)
 
-        for i, (_, frame_number, _, _) in enumerate(top_frames):
+        for i, frame in enumerate(top_frames):
+            if len(frame) == 2:
+                _, frame_number = frame
+            else:
+                _, frame_number, _, _ = frame
             self.cap.set(cv.CAP_PROP_POS_FRAMES, frame_number)
             ret, frame = self.cap.read()
             if ret:
@@ -190,6 +168,8 @@ class VideoAnalyzer:
                 print(f"Probe frame {i+1} saved at {save_path}")
             else:
                 print(f"Failed to retrieve frame at frame number: {frame_number}")
+
+        self.release_resources()
 
     def print_frame(self, frame_number, window_name="Frame"):
         # Reinitialize the video capture to ensure frames can be accessed correctly
@@ -636,6 +616,15 @@ class FrameAnalyzerDeepface:
 
     def analyze_frame(self, frame):
         faces = DeepFace.extract_faces(frame, detector_backend=self.detect_backend, enforce_detection=False)
+
+        if not faces:
+            return {
+                'face_count': 0,
+                'face_area': 0,
+                'confidence': [],
+                'average_confidence': 0,
+                'coordinates': None
+            }
 
         confidences = []
         coordinates = []
