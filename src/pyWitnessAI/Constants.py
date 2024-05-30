@@ -3,12 +3,12 @@ import numpy as np
 
 # Defining colors used below
 colors = {
-    'red': (0, 0, 1),
-    'yellow': (0, 1, 1),
+    'red': (1, 0, 0),
+    'yellow': (1, 1, 0),
     'green': (0, 1, 0),
-    'blue': (1, 0, 0),
+    'blue': (0, 0, 1),
     'magenta': (1, 0, 1),
-    'cyan': (1, 1, 0),
+    'cyan': (0, 1, 1),
     'white': (1, 1, 1),
     'black': (0, 0, 0),
     'gray': (0.49, 0.49, 0.49),
