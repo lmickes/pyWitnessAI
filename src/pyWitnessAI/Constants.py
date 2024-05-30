@@ -3,10 +3,10 @@ import numpy as np
 
 # Defining colors used below
 colors = {
-    'blue': (1, 0, 0),
-    'green': (0, 1, 0),
     'red': (0, 0, 1),
     'yellow': (0, 1, 1),
+    'green': (0, 1, 0),
+    'blue': (1, 0, 0),
     'magenta': (1, 0, 1),
     'cyan': (1, 1, 0),
     'white': (1, 1, 1),
@@ -22,7 +22,7 @@ legend_colors = {
     'mean': colors['green'],
     'mtcnn': colors['blue'],
     'opencv': colors['red'],
-    'fastmtcnn': colors['magenta'],
+    'fastmtcnn': colors['yellow'],
     'lineup': colors['gray']
 
 }
