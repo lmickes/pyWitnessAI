@@ -22,7 +22,7 @@ legend_colors = {
     'mean': colors['green'],
     'mtcnn': colors['blue'],
     'opencv': colors['red'],
-    'deepface': colors['magenta'],
+    'fastmtcnn': colors['magenta'],
     'lineup': colors['gray']
 
 }
@@ -31,6 +31,6 @@ line_styles = {
     'mtcnn': '-',
     'opencv': '--',
     'lineup': '-.',
-    'deepface': '--',
+    'fastmtcnn': '--',
 }
 
