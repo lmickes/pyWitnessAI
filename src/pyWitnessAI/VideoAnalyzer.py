@@ -103,10 +103,11 @@ class VideoAnalyzer:
 
             for i, frame_data in enumerate(analyzer_output):
                 face_area = frame_data.get('face_area', 0)
-                average_confidence = frame_data.get('average_confidence', 0)
-                metric = face_area * average_confidence  # Combined metric
-                frames_metric.append((metric, self.frame_count[i], face_area, average_confidence))
-                frames_confidence.append((average_confidence, self.frame_count[i]))
+                confidences = frame_data.get('confidence', [0])
+                first_confidence = confidences[0] if confidences else 0
+                metric = face_area * first_confidence  # Combined metric
+                frames_metric.append((metric, self.frame_count[i], face_area, first_confidence))
+                frames_confidence.append((first_confidence, self.frame_count[i]))
 
         else:
             print(f"{detector} analyzer is not added.")
@@ -126,13 +127,13 @@ class VideoAnalyzer:
         with open(log_file, 'w') as f:
             for frame in top_frames:
                 if method == 'confidence':
-                    avg_conf, frame_num = frame
-                    log_message = (f"Probe frame at frame number: {frame_num} with avg_confidence: {avg_conf} "
+                    fst_conf, frame_num = frame
+                    log_message = (f"Probe frame at frame number: {frame_num} with confidence score: {fst_conf} "
                                    f"by {detector}\n")
                 elif method == 'metrics':
-                    metric, frame_num, face_area, avg_conf = frame
+                    metric, frame_num, face_area, fst_conf = frame
                     log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
-                                   f"(face_area: {face_area}, avg_confidence: {avg_conf}) by detector {detector}\n")
+                                   f"(face_area: {face_area}, confidence score: {fst_conf}) by detector {detector}\n")
 
                 print(log_message.strip())
                 f.write(log_message)
@@ -253,7 +254,7 @@ class VideoAnalyzer:
                     flattened_confidences.append(item)
 
             if flattened_confidences:
-                color = legend_colors.get(analyzer_name, colors['analyzer_name'])
+                color = legend_colors.get(analyzer_name, 'analyzer_name')
                 plt.hist(flattened_confidences, bins=30, alpha=transparency, label=analyzer_name, color=color, edgecolor='k')
 
         plt.xlabel('Confidence')
@@ -755,7 +756,6 @@ class FrameAnalyzerOpenCV:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -764,7 +764,6 @@ class FrameAnalyzerOpenCV:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -794,17 +793,13 @@ class FrameAnalyzerOpenCV:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
-
-        average_confidence = np.mean(confidences) if confidences else 0
 
         return {
             'face_count': len(valid_faces),
             'face_area': face_area_sum,
             'confidence': confidences,
-            'average_confidence': average_confidence,
             'coordinates': coordinates
         }
 
@@ -823,7 +818,6 @@ class FrameAnalyzerFastMTCNN:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -832,7 +826,6 @@ class FrameAnalyzerFastMTCNN:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -866,13 +859,10 @@ class FrameAnalyzerFastMTCNN:
                 'coordinates': []
             }
 
-        average_confidence = np.mean(confidences) if confidences else 0
-
         return {
             'face_count': len(valid_faces),
             'face_area': face_area_sum,
             'confidence': confidences,
-            'average_confidence': average_confidence,
             'coordinates': coordinates
         }
 
