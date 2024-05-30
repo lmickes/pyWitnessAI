@@ -100,7 +100,7 @@ class VideoAnalyzer:
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn', method='confidence'):
         frames_metric = []
         frames_confidence = []
-        log_file = f'{log_file}_{detector}_{method}'
+        log_file = f'{detector}_{method}_{log_file}'
 
         if detector in self.frame_analyzer_output:
             analyzer_output = self.frame_analyzer_output[detector]
