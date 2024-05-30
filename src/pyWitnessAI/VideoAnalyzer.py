@@ -4,7 +4,7 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 from mtcnn import MTCNN
-from .Constants import legend_colors, line_styles
+from .Constants import legend_colors, line_styles, colors
 from keras.models import load_model
 from importlib.resources import files
 from .DataFlattener import *
@@ -127,11 +127,12 @@ class VideoAnalyzer:
             for frame in top_frames:
                 if method == 'confidence':
                     avg_conf, frame_num = frame
-                    log_message = f"Probe frame at frame number: {frame_num} with avg_confidence: {avg_conf}\n"
+                    log_message = (f"Probe frame at frame number: {frame_num} with avg_confidence: {avg_conf} "
+                                   f"by {detector}\n")
                 elif method == 'metrics':
                     metric, frame_num, face_area, avg_conf = frame
                     log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
-                                   f"(face_area: {face_area}, avg_confidence: {avg_conf})\n")
+                                   f"(face_area: {face_area}, avg_confidence: {avg_conf}) by detector {detector}\n")
 
                 print(log_message.strip())
                 f.write(log_message)
@@ -236,11 +237,13 @@ class VideoAnalyzer:
         plt.legend()
         plt.grid(True)
 
-    def plot_mtcnn_confidence_histogram(self):
-        #  Plot the confidence histogram of mtcnn
-        if 'mtcnn' in self.frame_analyzer_output:
+    def plot_confidence_histogram(self, transparency=0.5):
+        """
+        Plot the confidence histogram for all analyzers with a specified transparency.
+        """
+        for analyzer_name, output in self.frame_analyzer_output.items():
             confidences = []
-            for data in self.frame_analyzer_output['mtcnn']:
+            for data in output:
                 if 'confidence' in data:
                     confidences.append(data['confidence'])
 
@@ -249,14 +252,16 @@ class VideoAnalyzer:
                 for item in sublist:
                     flattened_confidences.append(item)
 
-            plt.hist(flattened_confidences, bins=30, edgecolor='k')
-            plt.xlabel('confidence')
-            plt.ylabel('Frequency')
-            plt.title('MTCNN Confidence Histogram')
-            plt.grid(True)
+            if flattened_confidences:
+                color = legend_colors.get(analyzer_name, colors['rand'])
+                plt.hist(flattened_confidences, bins=30, alpha=transparency, label=analyzer_name, color=color, edgecolor='k')
 
-        else:
-            print('MTCNN data are not found in the output.')
+        plt.xlabel('Confidence')
+        plt.ylabel('Frequency')
+        plt.title('Confidence Histogram for All Analyzers')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
     def save_data(self, directory='results', prefix='analyzed'):
         #  Save the analyzed data results to .csv files.
@@ -440,7 +445,7 @@ class FrameProcessorVideoWriter:
 
 
 class FrameProcessorDisplayer:
-    def __init__(self, window_name='processed Video', name='displayer', box = 'False'):
+    def __init__(self, window_name='processed Video', name='displayer', box='False'):
         self.window_name = window_name
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
         self.name = name
