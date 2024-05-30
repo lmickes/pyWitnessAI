@@ -13,6 +13,9 @@ import heapq
 from deepface import DeepFace
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 
 class VideoAnalyzer:
     def __init__(self, video_path):
@@ -97,6 +100,7 @@ class VideoAnalyzer:
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn', method='confidence'):
         frames_metric = []
         frames_confidence = []
+        log_file = f'{log_file}_{detector}_{method}'
 
         if detector in self.frame_analyzer_output:
             analyzer_output = self.frame_analyzer_output[detector]
@@ -613,9 +617,9 @@ class FrameAnalyzerOpenCVIndependent:
 
 
 class FrameAnalyzerDeepface:
-    def __init__(self, name='deepface', detector_backend='mtcnn'):
+    def __init__(self, detector_backend='mtcnn'):
         self.detect_backend = detector_backend
-        self.name = name
+        self.name = detector_backend
         self.detected_faces = []
 
     def analyze_frame(self, frame):
