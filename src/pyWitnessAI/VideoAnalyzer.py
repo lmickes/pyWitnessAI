@@ -253,7 +253,7 @@ class VideoAnalyzer:
                     flattened_confidences.append(item)
 
             if flattened_confidences:
-                color = legend_colors.get(analyzer_name, colors['rand'])
+                color = legend_colors.get(analyzer_name, colors['analyzer_name'])
                 plt.hist(flattened_confidences, bins=30, alpha=transparency, label=analyzer_name, color=color, edgecolor='k')
 
         plt.xlabel('Confidence')
@@ -693,7 +693,6 @@ class FrameAnalyzerMTCNN:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -702,7 +701,6 @@ class FrameAnalyzerMTCNN:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
 
@@ -732,17 +730,13 @@ class FrameAnalyzerMTCNN:
                 'face_count': 0,
                 'face_area': 0,
                 'confidence': [],
-                'average_confidence': 0,
                 'coordinates': []
             }
-
-        average_confidence = np.mean(confidences) if confidences else 0
 
         return {
             'face_count': len(valid_faces),
             'face_area': face_area_sum,
             'confidence': confidences,
-            'average_confidence': average_confidence,
             'coordinates': coordinates
         }
 
