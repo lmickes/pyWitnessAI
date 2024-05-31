@@ -251,7 +251,7 @@ class VideoAnalyzer:
         plt.plot(self.frame_count, self.average_pixel_values, color=legend_colors['general'])
         plt.axhline(y=self.average_value, color=legend_colors['mean'], linestyle='--', label='Average value')
         plt.xlabel('Frame')
-        plt.ylim(min(self.average_pixel_values)-5, min(self.average_pixel_values)+5)
+        plt.ylim(min(self.average_pixel_values)-5, max(self.average_pixel_values)+5)
         plt.ylabel('Average pixel value')
         plt.title('Pixel Intensity Trend across the Video')
         plt.legend()
