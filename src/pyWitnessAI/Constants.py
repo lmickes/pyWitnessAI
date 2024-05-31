@@ -4,7 +4,7 @@ import numpy as np
 # Defining colors used below
 colors = {
     'red': (1, 0, 0),
-    'yellow': (1, 1, 0),
+    'yellow': (1, 0.7, 0.1),
     'green': (0, 1, 0),
     'blue': (0, 0, 1),
     'magenta': (1, 0, 1),
