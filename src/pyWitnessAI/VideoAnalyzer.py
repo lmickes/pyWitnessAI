@@ -224,6 +224,7 @@ class VideoAnalyzer:
 
     def plot_face_areas(self):
         #  Plots the face area recognized by the classifiers against frame numbers
+        upper_limit = 1.0
         for k, output in self.frame_analyzer_output.items():
             if k == "similarity":
                 continue
@@ -234,9 +235,10 @@ class VideoAnalyzer:
                 else:
                     face_areas.append(0)
             plt.plot(self.frame_count, face_areas, label=k, linestyle=line_styles[k], color=legend_colors[k])
+            upper_limit = max(face_areas) + 0.05
 
         plt.xlabel('Frame')
-        plt.ylim(0, 1.0)
+        plt.ylim(0, upper_limit)
         plt.ylabel('Face Area Ratio')
         plt.title('Face Area Ratio vs Frame Number')
         plt.legend()
