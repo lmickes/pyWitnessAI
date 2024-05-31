@@ -18,7 +18,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 
 class VideoAnalyzer:
-    def __init__(self, video_path):
+    def __init__(self, video_path, save_directory='Video analysis results'):
         self.video_path = video_path
         self.cap = cv.VideoCapture(video_path)
         self.frame_count = []
@@ -34,7 +34,10 @@ class VideoAnalyzer:
         self.frame_analyzed = 0
         self.frame_total = 0
 
+        self.save_directory = save_directory
         self.top_frames = None  # An attribute to get the best quality frame
+        self.find_probe_frames_detector = None
+        self.find_probe_frames_method = None
 
     def add_analyzer(self, analyzer):
         #  Add an external frame analyzer
@@ -98,9 +101,15 @@ class VideoAnalyzer:
         self.process_video(frame_start, frame_end)
 
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn', method='confidence'):
+        save_directory = f'{self.save_directory}/probe_frames/{detector}_{method}_probe_frames'
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        self.find_probe_frames_detector = detector
+        self.find_probe_frames_method = method
         frames_metric = []
         frames_confidence = []
-        log_file = f'{detector}_{method}_{log_file}'
+        log_file = f'{save_directory}/{detector}_{method}_{log_file}'
 
         if detector in self.frame_analyzer_output:
             analyzer_output = self.frame_analyzer_output[detector]
@@ -152,7 +161,9 @@ class VideoAnalyzer:
                 _, frame_number, _, _ = frame
             self.print_frame(frame_number, f"Probe Frame {i+1}")
 
-    def save_probe_frames(self, top_frames, save_directory='probe_frames'):
+    def save_probe_frames(self, top_frames):
+        save_directory = (f'{self.save_directory}/probe_frames/{self.find_probe_frames_detector}_'
+                          f'{self.find_probe_frames_method}_probe_frames')
         if not os.path.exists(save_directory):
             os.makedirs(save_directory)
 
@@ -293,7 +304,8 @@ class VideoAnalyzer:
         df = pd.DataFrame(data)
         df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
-    def save_data_flattened(self, directory='results', prefix='analyzed_flattened'):
+    def save_data_flattened(self, directory='', prefix='analyzed_flattened'):
+        directory = f'{self.save_directory}/{directory}'
         if not os.path.exists(directory):
             os.makedirs(directory)
 
