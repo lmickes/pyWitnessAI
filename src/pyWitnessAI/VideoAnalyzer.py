@@ -213,7 +213,8 @@ class VideoAnalyzer:
                     face_counts.append(data['face_count'])
                 else:
                     face_counts.append(0)
-            plt.plot(self.frame_count, face_counts, label=k, linestyle=line_styles[k], color=legend_colors[k])
+            plt.plot(self.frame_count, face_counts, label=k, linestyle=line_styles[k], color=legend_colors[k],
+                     alpha=0.75)
 
         plt.xlabel('Frame')
         plt.ylim(0, 5)
@@ -234,7 +235,8 @@ class VideoAnalyzer:
                     face_areas.append(data['face_area'] / self.frame_area)
                 else:
                     face_areas.append(0)
-            plt.plot(self.frame_count, face_areas, label=k, linestyle=line_styles[k], color=legend_colors[k])
+            plt.plot(self.frame_count, face_areas, label=k, linestyle=line_styles[k],
+                     color=legend_colors[k], alpha=0.75)
             upper_limit = max(face_areas) + 0.05
 
         plt.xlabel('Frame')
@@ -249,11 +251,33 @@ class VideoAnalyzer:
         plt.plot(self.frame_count, self.average_pixel_values, color=legend_colors['general'])
         plt.axhline(y=self.average_value, color=legend_colors['mean'], linestyle='--', label='Average value')
         plt.xlabel('Frame')
-        plt.ylim(self.average_value-50, self.average_value+50)
+        plt.ylim(min(self.average_pixel_values)-5, min(self.average_pixel_values)+5)
         plt.ylabel('Average pixel value')
         plt.title('Pixel Intensity Trend across the Video')
         plt.legend()
         plt.grid(True)
+
+    def plot_confidence_vs_frame(self):
+        #  Plot the confidence as a function of frame number
+        for analyzer_name, output in self.frame_analyzer_output.items():
+            frame_numbers = []
+            confidences = []
+
+            for frame_num, data in enumerate(output):
+                if 'confidence' in data:
+                    frame_numbers.extend([frame_num] * len(data['confidence']))
+                    confidences.extend(data['confidence'])
+
+            if confidences:
+                color = legend_colors.get(analyzer_name, 'analyzer_name')
+                plt.scatter(frame_numbers, confidences, label=analyzer_name, color=color, alpha=0.75, s=10)
+
+        plt.xlabel('Frame Number')
+        plt.ylabel('Confidence')
+        plt.title('Confidence vs Frame Number')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
     def plot_confidence_histogram(self, transparency=0.5):
         """
