@@ -279,6 +279,41 @@ class VideoAnalyzer:
         plt.grid(True)
         plt.show()
 
+    def plot_confidence(self, start_frame=0, end_frame=None):
+        if end_frame is None:
+            end_frame = int(self.frame_total)  # Ensure frame_total is an integer
+
+        # Filter data for frames within the specified range
+        frame_range = range(int(start_frame), min(int(end_frame), len(self.frame_count)))
+
+        # Initialize a plot
+        plt.figure(figsize=(14, 7))
+
+        for analyzer_name, output in self.frame_analyzer_output.items():
+            confidences = []
+            frames = []
+
+            for i in frame_range:
+                if i < len(output):
+                    frame_data = output[i]
+                    if 'confidence' in frame_data and frame_data['confidence']:
+                        confidences.append(frame_data['confidence'][0])  # Take the first face's confidence
+                        frames.append(self.frame_count[i])
+                    else:
+                        confidences.append(None)  # Add None for missing confidence data
+                        frames.append(self.frame_count[i])
+
+            if confidences:
+                plt.plot(frames, confidences, 'o-', label=f'{analyzer_name}_confidence_0')
+
+        plt.xlabel('Frame Number')
+        plt.ylabel('Confidence')
+        plt.ylim(0.5, 1)
+        plt.title('Confidence of Different Analyzers for the Face in Each Frame')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     def plot_confidence_histogram(self, transparency=0.5):
         """
         Plot the confidence histogram for all analyzers with a specified transparency.
