@@ -11,6 +11,7 @@ from .DataFlattener import *
 from PIL import Image
 import heapq
 from deepface import DeepFace
+import time
 # You should also load the path of cascade, similarity_model, lineup_images before using the analyzer
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -63,6 +64,9 @@ class VideoAnalyzer:
         #  Process the video frame between frame_start and frame_end
         frame_analyzed = 0
 
+        # Initialize timing dictionary
+        analyzer_timings = {analyzer: 0.0 for analyzer in self.frame_analyzer}
+
         for frame_count in range(frame_start, frame_end + 1):
             ret, frame = self.cap.read()
 
@@ -80,8 +84,11 @@ class VideoAnalyzer:
             for k in self.frame_processor:
                 frame = self.frame_processor[k].process_frame(frame)
 
-            for k in self.frame_analyzer:
-                self.frame_analyzer_output[k].append(self.frame_analyzer[k].analyze_frame(frame))
+            for analyzer_name, analyzer in self.frame_analyzer.items():
+                start_time = time.time()  # Record start time
+                self.frame_analyzer_output[analyzer_name].append(analyzer.analyze_frame(frame))
+                end_time = time.time()  # Record end time
+                analyzer_timings[analyzer_name] += end_time - start_time  # Accumulate time
 
             frame_analyzed += 1
 
