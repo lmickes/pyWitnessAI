@@ -97,6 +97,10 @@ class VideoAnalyzer:
         self.release_resources()
         cv.destroyAllWindows()
 
+        # Print timing results
+        for analyzer_name, total_time in analyzer_timings.items():
+            print(f"Total time for {analyzer_name}: {total_time:.2f} seconds")
+
     def get_analysis_info(self):
         #  Get the number of analyzed frame and total frames
         return {
