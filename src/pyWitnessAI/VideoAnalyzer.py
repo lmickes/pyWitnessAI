@@ -17,7 +17,6 @@ import time
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
-
 class VideoAnalyzer:
     def __init__(self, video_path, save_directory='Video analysis results'):
         self.video_path = video_path
@@ -1097,7 +1096,7 @@ class LineupLoader:
                         self.lineup_images.append(processed_image)
             return self.lineup_images
 
-    def compare_faces(self, target_faces, filler_faces, model_name='Facenet', calculate_method='euclidean'):
+    def compare_faces(self, target_faces, filler_faces, model_name='Facenet512', calculate_method='euclidean'):
         #  Use pre-detected faces for analysis
         frame_results = []
         model_name = model_name
@@ -1130,7 +1129,10 @@ class LineupLoader:
     def calculate_similarity_euclidean(self, emb1, emb2):
         return np.linalg.norm(emb1 - emb2)
 
-    def save(self, data, directory='results', column_name=None):
+    def save(self, data, directory='results', label='', column_name=None):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
         transposed_data = {}
 
         # Extract data
@@ -1148,7 +1150,7 @@ class LineupLoader:
         df_transposed.columns = [str(i) for i in column_name]
 
         # Save to CSV
-        csv_filename = 'similarity_scores.csv'
+        csv_filename = f"{label}_similarity_scores.csv"
 
         # Save to CSV
         df_transposed.to_csv(os.path.join(directory, csv_filename), index=True)
