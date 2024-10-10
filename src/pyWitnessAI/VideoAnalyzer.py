@@ -4,7 +4,7 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 from mtcnn import MTCNN
-from .Constants import legend_colors, line_styles, colors
+from .Constants import legend_colors, line_styles, get_color_for_analyzer, get_style_for_analyzer
 from keras.models import load_model
 from importlib.resources import files
 from .DataFlattener import *
@@ -223,8 +223,9 @@ class VideoAnalyzer:
                     face_counts.append(data['face_count'])
                 else:
                     face_counts.append(0)
-            plt.plot(self.frame_count, face_counts, label=k, linestyle=line_styles[k], color=legend_colors[k],
-                     alpha=0.75)
+            plt.plot(self.frame_count, face_counts, label=k,
+                     linestyle=get_style_for_analyzer(k),
+                     color=get_color_for_analyzer(k), alpha=0.75)
 
         plt.xlabel('Frame')
         plt.ylim(0, 5)
@@ -245,8 +246,8 @@ class VideoAnalyzer:
                     face_areas.append(data['face_area'] / self.frame_area)
                 else:
                     face_areas.append(0)
-            plt.plot(self.frame_count, face_areas, label=k, linestyle=line_styles[k],
-                     color=legend_colors[k], alpha=0.75)
+            plt.plot(self.frame_count, face_areas, label=k, linestyle=get_style_for_analyzer(k),
+                     color=get_color_for_analyzer(k), alpha=0.75)
             upper_limit = max(face_areas) + 0.05
 
         plt.xlabel('Frame')
@@ -279,7 +280,7 @@ class VideoAnalyzer:
                     confidences.extend(data['confidence'])
 
             if confidences:
-                color = legend_colors.get(analyzer_name, 'analyzer_name')
+                color = get_color_for_analyzer(analyzer_name)
                 plt.scatter(frame_numbers, confidences, label=analyzer_name, color=color, alpha=0.75, s=10)
 
         plt.xlabel('Frame Number')
@@ -340,7 +341,7 @@ class VideoAnalyzer:
                     flattened_confidences.append(item)
 
             if flattened_confidences:
-                color = legend_colors.get(analyzer_name, 'analyzer_name')
+                color = get_color_for_analyzer(analyzer_name)
                 plt.hist(flattened_confidences, bins=30, alpha=transparency, label=analyzer_name, color=color, edgecolor='k')
 
         plt.xlabel('Confidence')
