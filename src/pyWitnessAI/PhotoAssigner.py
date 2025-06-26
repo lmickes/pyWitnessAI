@@ -1,50 +1,65 @@
 import os
 import shutil
-import csv
+import pandas as pd
+import re
 
+def organize_photos(photos_directory, data_file, label_column):
+    # 自动读取 CSV 或 Excel
+    file_extension = os.path.splitext(data_file)[1].lower()
+    if file_extension == '.csv':
+        df = pd.read_csv(data_file)
+    elif file_extension in ['.xls', '.xlsx']:
+        df = pd.read_excel(data_file)
+    else:
+        raise ValueError("Unsupported file format. Please use .csv or .xlsx/.xls")
 
-def organize_photos(photos_directory, results_file, column_name):
-    # Read the CSV file
-    with open(results_file, 'r') as file:
-        csv_reader = csv.DictReader(file)
+    # 自动找到照片编号列
+    number_col = None
+    for col in df.columns:
+        # 通过正则匹配列中是否存在“xxx_数字”或“数字.jpg”这种格式
+        if df[col].astype(str).str.contains(r'\d+').any():
+            number_col = col
+            break
 
-        # Create a dictionary to store the mapping of photo names to their corresponding results
-        photo_results = {}
-        for row in csv_reader:
-            # Code for Colloff's dataset
-            # photo_number = row['number'].split('(')[1].split(')')[0]  # Extract the number from the photo name
-            # photo_name = f"image ({photo_number}).jpg"  # Construct the actual photo name
+    if number_col is None:
+        raise ValueError("No column with photo numbers detected.")
 
-            # Code for Morgan data
-            photo_number = row['number']  # Directly use the number without parentheses
-            photo_name = f"{photo_number}.jpg"  # Match your actual file naming pattern
-            result = row[column_name]
-            photo_results[photo_name] = result
+    # 提取照片编号 -> e.g., 从 similarity_1.jpg -> 1
+    df['photo_number'] = df[number_col].astype(str).str.extract(r'(\d+)')
 
-    # Create directories based on the unique values in the specified column
-    unique_results = set(photo_results.values())
-    for result in unique_results:
-        directory_name = os.path.join(photos_directory, f"{column_name}_{result}")
-        os.makedirs(directory_name, exist_ok=True)
+    # 读取照片文件夹下所有照片文件，并提取编号
+    photo_files = [f for f in os.listdir(photos_directory) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    photo_dict = {}
+    for photo in photo_files:
+        match = re.search(r'(\d+)', photo)
+        if match:
+            photo_dict[match.group(1)] = photo  # 用编号作为key
 
-    # Assign each photo to the right directory based on its result
-    for photo_name, result in photo_results.items():
-        source_path = os.path.join(photos_directory, photo_name)
-        destination_path = os.path.join(photos_directory, f"{column_name}_{result}", photo_name)
+    # 提取标签列
+    if label_column not in df.columns:
+        raise ValueError(f"Label column '{label_column}' not found in the data file.")
 
-        # Check if the file exists before copying
-        if os.path.exists(source_path):
-            shutil.copy(source_path, destination_path)
+    # 获取文档名作为文件夹前缀
+    doc_name = os.path.splitext(os.path.basename(data_file))[0]
+
+    # 开始归类
+    for _, row in df.iterrows():
+        num = str(row['photo_number'])
+        label = row[label_column]
+
+        if num in photo_dict:
+            photo_name = photo_dict[num]
+            dest_dir = os.path.join(photos_directory, f"{label_column}_{label}")
+            os.makedirs(dest_dir, exist_ok=True)
+            source_path = os.path.join(photos_directory, photo_name)
+            dest_path = os.path.join(dest_dir, photo_name)
+            shutil.copy(source_path, dest_path)
         else:
-            print(f"Warning: {source_path} not found.")
+            print(f"Warning: Photo with number {num} not found in {photos_directory}.")
 
     print("Photo organization completed.")
 
-
-
-# Example usage
-# photos_directory = "D:/MscPsy/Data/Colloff2021/FillerLibrary/"
-# csv_file = "D:/MscPsy/Data/Colloff2021/results/R_Analysis/merged_data.csv"
-# column_name = "similarity_group_to_perp_frs"
-#
-# organize_photos(photos_directory, csv_file, column_name)
+# Example:
+# organize_photos("D:/PhD/Studies/2ndStudy/easyVideoMorgan/Fillerpool",
+#                 "D:/PhD/Studies/2ndStudy/similarity_data_labeled.csv",
+#                 "similarity_group_to_perp_facenet512")
