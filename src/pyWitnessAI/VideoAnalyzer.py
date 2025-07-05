@@ -1146,7 +1146,12 @@ class LineupLoader:
         return np.array(embedding)
 
     def calculate_similarity_euclidean(self, emb1, emb2):
-        return np.linalg.norm(emb1 - emb2)
+        # Apply L2 normalization to both embeddings
+        emb1_normalized = emb1 / np.linalg.norm(emb1)
+        emb2_normalized = emb2 / np.linalg.norm(emb2)
+
+        # Compute the Euclidean distance between normalized embeddings
+        return np.linalg.norm(emb1_normalized - emb2_normalized)
 
     def save(self, data, directory='results', label='', column_name=None):
         if not os.path.exists(directory):
