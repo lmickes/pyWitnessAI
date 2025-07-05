@@ -8,6 +8,7 @@ from .Constants import legend_colors, line_styles, get_color_for_analyzer, get_s
 from keras.models import load_model
 from importlib.resources import files
 from .DataFlattener import *
+from .PhotoAssigner import *
 from PIL import Image
 import heapq
 from deepface import DeepFace
@@ -128,8 +129,24 @@ class VideoAnalyzer:
                 face_area = frame_data.get('face_area', 0)
                 confidences = frame_data.get('confidence', [0])
                 first_confidence = confidences[0] if confidences else 0
-                metric = face_area * first_confidence  # Combined metric
-                frames_metric.append((metric, self.frame_count[i], face_area, first_confidence))
+                coords = frame_data.get('coordinates', [])
+
+                # Frontal heuristic score
+                frontal_score = 0
+                if coords:
+                    x, y, w, h = coords[0]
+                    center_x = x + w / 2
+                    center_y = y + h / 2
+                    aspect_ratio = w / h if h > 0 else 0
+
+                    # Consider face to be frontal if near center and aspect ratio is natural
+                    if 0.75 < aspect_ratio < 1.33 and abs(center_x - self.frame_width / 2) < 0.25 * self.frame_width:
+                        frontal_score = 1  # or weight this e.g., 1.5
+
+                # Composite metric
+                metric = face_area * first_confidence * (1 + 0.5 * frontal_score)
+
+                frames_metric.append((metric, self.frame_count[i], face_area, first_confidence, frontal_score))
                 frames_confidence.append((first_confidence, self.frame_count[i]))
 
         else:
@@ -154,9 +171,10 @@ class VideoAnalyzer:
                     log_message = (f"Probe frame at frame number: {frame_num} with confidence score: {fst_conf} "
                                    f"by {detector}\n")
                 elif method == 'metrics':
-                    metric, frame_num, face_area, fst_conf = frame
-                    log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric} "
-                                   f"(face_area: {face_area}, confidence score: {fst_conf}) by detector {detector}\n")
+                    metric, frame_num, face_area, fst_conf, frontal_score = frame
+                    log_message = (f"Probe frame at frame number: {frame_num} with metric: {metric:.2f} "
+                                   f"(face_area: {face_area}, confidence score: {fst_conf:.2f}, frontal_score: {frontal_score}) "
+                                   f"by detector {detector}\n")
 
                 print(log_message.strip())
                 f.write(log_message)
@@ -1128,7 +1146,12 @@ class LineupLoader:
         return np.array(embedding)
 
     def calculate_similarity_euclidean(self, emb1, emb2):
-        return np.linalg.norm(emb1 - emb2)
+        # Apply L2 normalization to both embeddings
+        emb1_normalized = emb1 / np.linalg.norm(emb1)
+        emb2_normalized = emb2 / np.linalg.norm(emb2)
+
+        # Compute the Euclidean distance between normalized embeddings
+        return np.linalg.norm(emb1_normalized - emb2_normalized)
 
     def save(self, data, directory='results', label='', column_name=None):
         if not os.path.exists(directory):
