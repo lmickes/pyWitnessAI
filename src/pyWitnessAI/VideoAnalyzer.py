@@ -1115,7 +1115,7 @@ class LineupLoader:
                         self.lineup_images.append(processed_image)
             return self.lineup_images
 
-    def compare_faces(self, target_faces, filler_faces, model_name='Facenet512', calculate_method='euclidean'):
+    def compare_faces(self, target_faces, filler_faces, detector='opencv', model_name='Facenet512', calculate_method='euclidean'):
         #  Use pre-detected faces for analysis
         frame_results = []
         model_name = model_name
@@ -1123,11 +1123,11 @@ class LineupLoader:
         for target_face in target_faces:
             face_comparisons = []
 
-            embedding_results_target = self.get_embedding(target_face, model_name)
+            embedding_results_target = self.get_embedding(target_face, detector, model_name)
             emb_target = np.array(embedding_results_target[0]['embedding'])
 
             for j, filler_face in enumerate(filler_faces):
-                embedding_results_filler = self.get_embedding(filler_face, model_name)
+                embedding_results_filler = self.get_embedding(filler_face, detector, model_name)
                 emb_filler = np.array(embedding_results_filler[0]['embedding'])
 
                 if calculate_method == 'euclidean':
@@ -1140,9 +1140,9 @@ class LineupLoader:
 
         return frame_results
 
-    def get_embedding(self, face, model_name):
+    def get_embedding(self, face, detector, model_name):
         #  Generate embedding using FaceNet
-        embedding = DeepFace.represent(face, model_name=model_name, enforce_detection=False)
+        embedding = DeepFace.represent(face, model_name=model_name, detector_backend = detector, enforce_detection=False)
         return np.array(embedding)
 
     def calculate_similarity_euclidean(self, emb1, emb2):
