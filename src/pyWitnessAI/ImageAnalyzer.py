@@ -163,7 +163,7 @@ class ImageAnalyzer:
         if self.similarity_matrix is None:
             print("No similarity matrix found. Using process() by default...")
             self.process()
-        return self.similarity_matrix
+        return self.similarity_matrix.round(4)
 
     def save(self, directory='results', label='similarity_matrix'):
         """
