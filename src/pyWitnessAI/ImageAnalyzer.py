@@ -111,10 +111,16 @@ class ImageAnalyzer:
 
         print("Calculating similarities...")
         similarity_data = []
+
         for row_base, row_embedding in tqdm(row_embeddings.items()):
             row_scores = []
             for column_base, column_embedding in column_embeddings.items():
-                similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
+                if self.distance_metric == "euclidean":
+                    similarity_score = self.calculate_similarity_euclidean(row_embedding, column_embedding)
+                elif self.distance_metric == "cosine":
+                    similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
+                else:
+                    raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
                 row_scores.append(similarity_score)
             similarity_data.append(row_scores)
 
