@@ -94,7 +94,7 @@ class ImageAnalyzer:
         emb2_norm = embedding2 / np.linalg.norm(embedding2)
         return 1 - np.dot(emb1_norm, emb2_norm)
 
-    def analyze(self):
+    def process_embedding(self):
         """
         Generate similarity matrix using DeepFace.represent (embedding-based method).
         """
@@ -131,7 +131,7 @@ class ImageAnalyzer:
         )
         self.method_used = "analyze"
 
-    def process(self):
+    def process_verify(self):
         """
         Generate similarity matrix using DeepFace.verify (verification-based method).
         """
@@ -164,11 +164,8 @@ class ImageAnalyzer:
 
     def dataframe(self):
         """
-        Return the similarity matrix. If no method has been called, use process() by default.
+        Return the similarity matrix.
         """
-        if self.similarity_matrix is None:
-            print("No similarity matrix found. Using process() by default...")
-            self.process()
         return self.similarity_matrix.round(4)
 
     def save(self, directory='results', label='similarity_matrix'):
