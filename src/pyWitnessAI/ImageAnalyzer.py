@@ -82,8 +82,8 @@ class ImageAnalyzer:
         """
         Calculate L2-normalized Euclidean distance between two embeddings.
         """
-        emb1_norm = embedding1 / np.linalg.norm(embedding1)
-        emb2_norm = embedding2 / np.linalg.norm(embedding2)
+        emb1_norm = embedding1
+        emb2_norm = embedding2
         return np.linalg.norm(emb1_norm - emb2_norm)
 
     def calculate_similarity_cosine(self, embedding1, embedding2):
@@ -178,7 +178,7 @@ class ImageAnalyzer:
         :param label: Label to include in the filename.
         """
         if self.similarity_matrix is None:
-            raise ValueError("No similarity matrix to save. Please run analyze() or process() first.")
+            raise ValueError("No similarity matrix to save. Please run analyze() or process()/dataframe() first.")
 
         # Ensure the directory exists
         if not os.path.exists(directory):
