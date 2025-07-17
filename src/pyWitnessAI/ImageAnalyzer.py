@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from deepface import DeepFace
 from tqdm import tqdm
+from facenet_pytorch import MTCNN, InceptionResnetV1
+import torch
 
 class ImageLoader:
     def __init__(self, images):
@@ -66,6 +68,10 @@ class ImageAnalyzer:
         self.similarity_matrix = None  # To store the final similarity matrix
         self.method_used = None  # To track which method was used (analyze or process)
 
+        # Initialize MTCNN and InceptionResnetV1 for embedding extraction
+        self.mtcnn = MTCNN()
+        self.resnet = InceptionResnetV1(pretrained='vggface2').eval()
+
     def get_embedding(self, image):
         """
         Obtain the facial embedding for a given image using DeepFace.
@@ -77,6 +83,17 @@ class ImageAnalyzer:
             detector_backend=self.backend
         )
         return np.array(embedding[0]['embedding'])
+
+    def get_embedding_facenet(self, img):
+        """
+        Extract facial embedding using MTCNN and InceptionResnetV1.
+        """
+        face = self.mtcnn(img)
+        if face is None:
+            return None
+        emb = self.resnet(face.unsqueeze(0))   # Extract embedding
+        emb = torch.nn.functional.normalize(emb, p=2, dim=1)  # L2 normalization
+        return emb.detach().cpu().numpy().flatten()
 
     def calculate_similarity_euclidean(self, embedding1, embedding2):
         """
@@ -161,6 +178,43 @@ class ImageAnalyzer:
             columns=self.column_images.images.keys()
         )
         self.method_used = "process"
+
+    def process_with_facenet(self):
+        """
+        Generate similarity matrix using MTCNN and InceptionResnetV1 for embedding extraction.
+        """
+        column_embeddings = {}
+        row_embeddings = {}
+
+        print("Extracting embeddings for column images using Facenet...")
+        for image_base, image in tqdm(self.column_images.images.items()):
+            column_embeddings[image_base] = self.get_embedding_facenet(image)
+
+        print("Extracting embeddings for row images using Facenet...")
+        for image_base, image in tqdm(self.row_images.images.items()):
+            row_embeddings[image_base] = self.get_embedding_facenet(image)
+
+        print("Calculating similarities using Facenet embeddings...")
+        similarity_data = []
+
+        for row_base, row_embedding in tqdm(row_embeddings.items()):
+            row_scores = []
+            for column_base, column_embedding in column_embeddings.items():
+                if self.distance_metric == "euclidean":
+                    similarity_score = self.calculate_similarity_euclidean(row_embedding, column_embedding)
+                elif self.distance_metric == "cosine":
+                    similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
+                else:
+                    raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
+                row_scores.append(similarity_score)
+            similarity_data.append(row_scores)
+
+        self.similarity_matrix = pd.DataFrame(
+            similarity_data,
+            index=row_embeddings.keys(),
+            columns=column_embeddings.keys()
+        )
+        self.method_used = "process_facenet"
 
     def dataframe(self):
         """
