@@ -122,7 +122,11 @@ class ImageAnalyzer:
             embedding1 = embedding1.detach().numpy()
         if isinstance(embedding2, torch.Tensor):
             embedding2 = embedding2.detach().numpy()
-        return np.linalg.norm(embedding1 - embedding2) / np.sqrt(len(embedding1))
+
+        embedding1 = embedding1 / np.linalg.norm(embedding1)
+        embedding2 = embedding2 / np.linalg.norm(embedding2)
+
+        return np.linalg.norm(embedding1 - embedding2)
 
     def calculate_similarity_cosine(self, embedding1, embedding2):
         """
@@ -132,9 +136,9 @@ class ImageAnalyzer:
             embedding1 = embedding1.detach().numpy()
         if isinstance(embedding2, torch.Tensor):
             embedding2 = embedding2.detach().numpy()
-        emb1_norm = embedding1 / np.linalg.norm(embedding1)
-        emb2_norm = embedding2 / np.linalg.norm(embedding2)
-        return 1 - np.dot(emb1_norm, emb2_norm)
+        embedding1 = embedding1 / np.linalg.norm(embedding1)
+        embedding2 = embedding2 / np.linalg.norm(embedding2)
+        return 1 - np.dot(embedding1, embedding2)
 
     def process_embedding(self):
         """
@@ -142,6 +146,12 @@ class ImageAnalyzer:
         """
         column_embeddings = {}
         row_embeddings = {}
+
+        from contextlib import redirect_stdout, redirect_stderr
+
+        f = open('output.txt', 'w')
+        redirect_stdout(f)
+        redirect_stderr(f)
 
         print("Extracting embeddings for column images...")
         for image_base, image in tqdm(self.column_images.images.items()):
