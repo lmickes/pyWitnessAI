@@ -1,4 +1,3 @@
-import cv2 as cv
 import os
 import numpy as np
 import pandas as pd
@@ -6,6 +5,7 @@ from deepface import DeepFace
 from tqdm import tqdm
 from facenet_pytorch import MTCNN, InceptionResnetV1
 import torch
+from PIL import Image
 
 class ImageLoader:
     def __init__(self, images):
@@ -26,7 +26,10 @@ class ImageLoader:
             raise ValueError("Unsupported images input. Provide a list, directory path, or glob pattern.")
 
         for image_path in image_paths:
-            image = cv.imread(image_path)
+            # image = cv.imread(image_path)
+            # image = np.array(Image.open(image_path))[:, :, 0:3]
+            image = Image.open(image_path).convert("RGB")
+
             if image is None:
                 raise ValueError(f"Failed to load image at {image_path}")
             image_base = os.path.splitext(os.path.basename(image_path))[0]
@@ -55,7 +58,8 @@ class ImageLoader:
 
 class ImageAnalyzer:
     def __init__(self, column_images, row_images, distance_metric="euclidean",
-                 backend="opencv", enforceDetection=False, model="VGG-Face"):
+                 backend="opencv", enforce_detection=False, model="VGG-Face",
+                 align=False, normalization="base"):
         """
         Initialize the ImageAnalyzer with ImageLoader instances for columns and rows.
         """
@@ -63,8 +67,10 @@ class ImageAnalyzer:
         self.row_images = row_images
         self.distance_metric = distance_metric
         self.backend = backend
-        self.enforceDetection = enforceDetection
+        self.enforceDetection = enforce_detection
         self.model = model
+        self.align = align
+        self.normalization = normalization
         self.similarity_matrix = None  # To store the final similarity matrix
         self.method_used = None  # To track which method was used (analyze or process)
 
@@ -76,11 +82,16 @@ class ImageAnalyzer:
         """
         Obtain the facial embedding for a given image using DeepFace.
         """
+        # Convert PIL.Image.Image to NumPy array
+        image_array = np.array(image)
+
         embedding = DeepFace.represent(
-            image,
+            image_array,
             model_name=self.model,
             enforce_detection=self.enforceDetection,
-            detector_backend=self.backend
+            detector_backend=self.backend,
+            align=self.align,
+            normalization=self.normalization
         )
         return np.array(embedding[0]['embedding'])
 
@@ -92,21 +103,35 @@ class ImageAnalyzer:
         if face is None:
             return None
         emb = self.resnet(face.unsqueeze(0))   # Extract embedding
-        emb = torch.nn.functional.normalize(emb, p=2, dim=1)  # L2 normalization
-        return emb.detach().cpu().numpy().flatten()
+        return emb
 
     def calculate_similarity_euclidean(self, embedding1, embedding2):
         """
         Calculate L2-normalized Euclidean distance between two embeddings.
         """
-        emb1_norm = embedding1
-        emb2_norm = embedding2
-        return np.linalg.norm(emb1_norm - emb2_norm)
+        if isinstance(embedding1, torch.Tensor):
+            return np.sqrt(((embedding1 - embedding2) * (embedding1 - embedding2)).sum().item())
+        else:
+            return np.linalg.norm(embedding1 - embedding2)
+
+    def calculate_similarity_euclidean_l2(self, embedding1, embedding2):
+        """
+        Calculate L2-normalized Euclidean distance between two embeddings.
+        """
+        if isinstance(embedding1, torch.Tensor):
+            embedding1 = embedding1.detach().numpy()
+        if isinstance(embedding2, torch.Tensor):
+            embedding2 = embedding2.detach().numpy()
+        return np.linalg.norm(embedding1 - embedding2) / np.sqrt(len(embedding1))
 
     def calculate_similarity_cosine(self, embedding1, embedding2):
         """
         Calculate cosine distance (1 - cosine similarity) between two embeddings.
         """
+        if isinstance(embedding1, torch.Tensor):
+            embedding1 = embedding1.detach().numpy()
+        if isinstance(embedding2, torch.Tensor):
+            embedding2 = embedding2.detach().numpy()
         emb1_norm = embedding1 / np.linalg.norm(embedding1)
         emb2_norm = embedding2 / np.linalg.norm(embedding2)
         return 1 - np.dot(emb1_norm, emb2_norm)
@@ -120,6 +145,7 @@ class ImageAnalyzer:
 
         print("Extracting embeddings for column images...")
         for image_base, image in tqdm(self.column_images.images.items()):
+        # for image_base, image in self.column_images.images.items():
             column_embeddings[image_base] = self.get_embedding(image)
 
         print("Extracting embeddings for row images...")
@@ -136,6 +162,8 @@ class ImageAnalyzer:
                     similarity_score = self.calculate_similarity_euclidean(row_embedding, column_embedding)
                 elif self.distance_metric == "cosine":
                     similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
+                elif self.distance_metric == "euclidean_l2":
+                    similarity_score = self.calculate_similarity_euclidean_l2(row_embedding, column_embedding)
                 else:
                     raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
                 row_scores.append(similarity_score)
@@ -146,7 +174,7 @@ class ImageAnalyzer:
             index=row_embeddings.keys(),
             columns=column_embeddings.keys()
         )
-        self.method_used = "analyze"
+        self.method_used = "process_embedding"
 
     def process_verify(self):
         """
@@ -158,13 +186,18 @@ class ImageAnalyzer:
             row_scores = []
             for column_base, column_image in self.column_images.images.items():
                 try:
+                    row_image = np.array(row_image)  # Ensure the image is in NumPy format
+                    column_image = np.array(column_image)  # Ensure the image is in NumPy format
+
                     result = DeepFace.verify(
                         row_image,
                         column_image,
                         model_name=self.model,
                         detector_backend=self.backend,
                         enforce_detection=self.enforceDetection,
-                        distance_metric=self.distance_metric
+                        distance_metric=self.distance_metric,
+                        align=self.align,
+                        normalization=self.normalization
                     )
                     similarity_score = result['distance']  # Use the distance metric from DeepFace.verify
                 except ValueError:
@@ -177,7 +210,7 @@ class ImageAnalyzer:
             index=self.row_images.images.keys(),
             columns=self.column_images.images.keys()
         )
-        self.method_used = "process"
+        self.method_used = "process_verify"
 
     def process_with_facenet(self):
         """
