@@ -1,4 +1,8 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
+
+import io
+from contextlib import redirect_stdout, redirect_stderr
 import numpy as np
 import pandas as pd
 from deepface import DeepFace
@@ -85,14 +89,16 @@ class ImageAnalyzer:
         # Convert PIL.Image.Image to NumPy array
         image_array = np.array(image)
 
-        embedding = DeepFace.represent(
-            image_array,
-            model_name=self.model,
-            enforce_detection=self.enforceDetection,
-            detector_backend=self.backend,
-            align=self.align,
-            normalization=self.normalization
-        )
+        # Suppress stdout and stderr during DeepFace embedding extraction
+        with io.StringIO() as buf, redirect_stdout(buf), redirect_stderr(buf):
+            embedding = DeepFace.represent(
+                image_array,
+                model_name=self.model,
+                enforce_detection=self.enforceDetection,
+                detector_backend=self.backend,
+                align=self.align,
+                normalization=self.normalization
+            )
         return np.array(embedding[0]['embedding'])
 
     def get_embedding_facenet(self, img):
@@ -146,12 +152,6 @@ class ImageAnalyzer:
         """
         column_embeddings = {}
         row_embeddings = {}
-
-        from contextlib import redirect_stdout, redirect_stderr
-
-        f = open('output.txt', 'w')
-        redirect_stdout(f)
-        redirect_stderr(f)
 
         print("Extracting embeddings for column images...")
         for image_base, image in tqdm(self.column_images.images.items()):
