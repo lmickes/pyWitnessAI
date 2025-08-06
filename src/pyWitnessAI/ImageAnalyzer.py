@@ -140,7 +140,7 @@ class ImageAnalyzer:
         embedding2 = embedding2 / np.linalg.norm(embedding2)
         return 1 - np.dot(embedding1, embedding2)
 
-    def process_embedding(self):
+    def process(self):
         """
         Generate similarity matrix using DeepFace.represent (embedding-based method).
         """
@@ -222,9 +222,10 @@ class ImageAnalyzer:
         )
         self.method_used = "process_verify"
 
-    def process_with_facenet(self):
+    def process_georgia_pipeline(self):
         """
-        Generate similarity matrix using MTCNN and InceptionResnetV1 for embedding extraction.
+        Generate similarity matrix using MTCNN and InceptionResnetV1 for embedding extraction
+        which is stated in Kleider-Offutt et al. (2024).
         """
         column_embeddings = {}
         row_embeddings = {}
