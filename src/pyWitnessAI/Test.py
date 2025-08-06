@@ -1,7 +1,7 @@
 from .VideoAnalyzer import *
 
 
-def test():
+def exclude_test():
     #  Input the path and arguments needed
     video_path = "D:/MscPsy/Data/Colloff2021/Eyewitness video.wmv"
     #  cascade_path = 'E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml'
