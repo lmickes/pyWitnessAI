@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "setuptools_scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pyWitnessAI"
 description = "Deepface based facial recognition"
@@ -6,12 +10,16 @@ authors = [
     { name = "Stewart Boogert", email = "sboogert@mac.com" },
     { name = "Damien Wang", email = "damien.wang@bristol.ac.uk" }
 ]
+
 dependencies = [
     "deepface",
     "numpy",
     "matplotlib",
     "ipython",
-    "cv"
+    "cv",
+    "numpy>=1.26,<2.0",
+    "pandas>=2.0,<3.0",
+    # "opencv-python<4.12",
 ]
 
 [project.optional-dependencies]
