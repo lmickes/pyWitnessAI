@@ -21,11 +21,9 @@ class PipelineConfig:
 class VideoLineupPipeline:
     """
     For each frame:
-      - detect/crop faces -> column_images
-      - lineup images -> row_images
-      - run ImageAnalyzer.<method>()
-      - (optional) Identifier to summarize
-      - append to a single CSV (long-form + per-frame summary columns)
+      - Row data: frame + lineup member distances + TA/TP summary (if identifier is set)
+      - Distance is calculated by ImageAnalyzer between detected faces and lineup members
+      - Summary is calculated by LineupIdentifier from the distance matrix
     """
 
     def __init__(self,
@@ -36,12 +34,23 @@ class VideoLineupPipeline:
         self.video_path = video_path
         self.lineup_loader = lineup_loader
         self.cfg = cfg
-        self.identifier = identifier
+
+        # Normalize identifier switch/object
+        if isinstance(identifier, LineupIdentifier):
+            self.identifier_obj: Optional[LineupIdentifier] = identifier
+            self.identifier_enabled: bool = True
+        elif identifier is True:
+            self.identifier_obj = LineupIdentifier()  # default threshold/targetLineup/target
+            self.identifier_enabled = True
+        else:
+            self.identifier_obj = None
+            self.identifier_enabled = False
 
         # Initialize the lineup rows from LineupLoader
         self._row_il = ImageLoader([*self.lineup_loader.lineup])  # paths -> PIL
         # Roles map: image base name -> role
         self.roles = LineupIdentifier._role_map_from_lineuploader(self.lineup_loader)
+
         self._analyzer_template = ImageAnalyzer(
             column_images=ImageLoader([]),
             row_images=self._row_il,
@@ -56,14 +65,13 @@ class VideoLineupPipeline:
 
     def _faces_from_frame(self, frame_bgr: np.ndarray) -> List[Image.Image]:
         """
-        使用 facenet-pytorch 的 MTCNN（通过 ImageAnalyzer 内部）进行对齐/裁剪也可，
-        这里用一个简化的灰度 + 人脸检测占位（你可替换为更稳健的 MTCNN 裁剪）。
+        Mtcnn can also be used here for better face detection/cropping.
         """
-        # 简化示例：直接把整帧当作“一个 probe”（若你已有更精准的 crop，可替换）
-        # 为了与 ImageAnalyzer 对接，这里返回 PIL.Image 列表
+        # Treat the whole frame as one face for simplicity
+        # Return pil for the consistency with ImageLoader
         img_rgb = cv.cvtColor(frame_bgr, cv.COLOR_BGR2RGB)
         pil = Image.fromarray(img_rgb)
-        return [pil]  # 你可以替换为“多脸列表”
+        return [pil]  # !!!!! can be multiple faces in future?
 
     def run(self, output_csv: str) -> str:
         cap = cv.VideoCapture(self.video_path)
@@ -108,8 +116,13 @@ class VideoLineupPipeline:
             col_il = ImageLoader([])
             col_il.images = {n: im for n, im in zip(probe_names, faces)}
             col_il.path_to_images = {n: f"{n}.png" for n in probe_names}  # Virtual paths
+
             analyzer = self._analyzer_template
             analyzer.column_images = col_il
+
+            # Gain the updated progress bar
+            analyzer.show_progress = self.cfg.show_progress
+
             getattr(analyzer, self.cfg.analyzer_method)()
             sim_df = analyzer.dataframe()
             sim_df = sim_df.T  # Rows: probe, Columns: lineup member
@@ -131,18 +144,16 @@ class VideoLineupPipeline:
             per_member_min = sim_df.min(axis=1)
 
             for probe, row in sim_df.iterrows():
-                for lm_name, dist in row.items():  # 每列是 lineup 成员
+                for lm_name, dist in row.items():  # each lineup member
                     role = self.roles.get(lm_name, "filler")
-                    rec = {
+                    records.append({
                         "frame": frame_idx,
                         "probe": probe,
                         "lineup_member": lm_name,
-                        "distance": float(dist),
+                        "distance": (None if pd.isna(dist) else float(dist)),
                         "role": role,
                         **summary
-                    }
-                    records.append(rec)
-
+                    })
         cap.release()
         df = pd.DataFrame.from_records(records)
 
