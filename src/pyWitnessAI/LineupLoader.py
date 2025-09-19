@@ -5,8 +5,14 @@ import logging
 from PIL import Image
 from typing import List, Optional, Dict, Literal, Tuple
 
-from pyWitnessAI import VerifyStyleDecider
-
+# logging.basicConfig(
+#     level=logging.DEBUG,  # Set to DEBUG for detailed trace
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.FileHandler('lineuploader.log'),
+#         logging.StreamHandler()  # to console
+#     ]
+# )
 
 class LineupLoader:
     def __init__(self, folder_path: str, guilty_suspect: Optional[str] = None, innocent_suspect: Optional[str] = None):
@@ -38,10 +44,19 @@ class LineupLoader:
             raise ValueError("Missing guilty suspect image. Please rename the perpetrator image or provide it.")
 
         # Default lineup (if perp -> TP; otherwise ->TA)
-        self.default_target: Literal["targetPresent", "targetAbsent"] = \
-            ("targetPresent" if self.perp_name else "targetAbsent")
+        self.default_target: Literal["targetPresent", "targetAbsent"] = (
+            "targetPresent" if self.perp_name else "targetAbsent"
+        )
 
         self.lineup: List[str] = self.generate_lineup()
+
+    def _normalize_provided_path(self, p: Optional[str]) -> Optional[str]:
+        if not p:
+            return None
+        if os.path.isabs(p):
+            return p
+        joined = os.path.join(self.folder_path, p)
+        return joined if os.path.exists(joined) else p
 
     def _load_and_classify(self, folder_path: str) -> Dict[str, List[str]]:
         extensions = ["jpg", "jpeg", "png", "gif", "webp", "bmp"]
@@ -51,20 +66,26 @@ class LineupLoader:
              glob.glob(os.path.join(folder_path, f"*.{ext.upper()}"))
              for ext in extensions], []
         )
-        image_dict = {"guilty_suspect": [], "innocent_suspect": []}
+        image_dict = {"guilty_suspect": [], "innocent_suspect": [], "filler": []}
+
+        self.guilty_suspect = self._normalize_provided_path(self.guilty_suspect)
+        self.innocent_suspect = self._normalize_provided_path(self.innocent_suspect)
 
         for image_path in image_paths:
-            name = os.path.basename(image_path).lower()
-            if "perp" in name:
+            name_lowercase = os.path.basename(image_path).lower()
+            if self.guilty_suspect and os.path.abspath(image_path) == os.path.abspath(self.guilty_suspect):
+                image_dict["guilty_suspect"].append(image_path)
+            elif self.innocent_suspect and os.path.abspath(image_path) == os.path.abspath(self.innocent_suspect):
+                image_dict["innocent_suspect"].append(image_path)
+            elif "perp" in name_lowercase:
                 image_dict["guilty_suspect"].append(image_path)
                 self.guilty_suspect = image_path
-            elif "designated" in name or "inn" in name:
+            elif "designated" in name_lowercase or "innocent" in name_lowercase:
                 image_dict["innocent_suspect"].append(image_path)
                 self.innocent_suspect = image_path
             else:
                 image_dict["filler"].append(image_path)
 
-        # !!!!!!!! Solve the problem of guilty suspect, maybe join with folder path?
         if self.guilty_suspect:
             image_dict["guilty_suspect"] = [self.guilty_suspect]
         if self.innocent_suspect:
@@ -87,9 +108,13 @@ class LineupLoader:
         target = target_lineup or self.default_target
 
         if target == "targetAbsent":
-            need_fillers = lineup_size - (1 if self.innocent_name else 0)
-        else:
+            assert self.image_groups["innocent_suspect"], "Innocent suspect image required for targetAbsent."
             need_fillers = lineup_size - 1
+            anchor = self.image_groups["innocent_suspect"][0]
+        else:
+            assert self.image_groups["guilty_suspect"], "Guilty suspect image required for targetPresent."
+            need_fillers = lineup_size - 1
+            anchor = self.image_groups["guilty_suspect"][0]
 
         if len(self.image_groups["filler"]) < need_fillers:
             raise ValueError("Insufficient fillers to generate lineup.")
