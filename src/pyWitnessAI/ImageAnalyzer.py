@@ -206,7 +206,7 @@ class ImageAnalyzer:
             index=row_embeddings.keys(),
             columns=column_embeddings.keys()
         ).astype(float)
-        self.method_used = "process_embedding"
+        self.method_used = "process"
 
     def process_verify(self):
         """
@@ -273,7 +273,7 @@ class ImageAnalyzer:
             index=row_embeddings.keys(),
             columns=column_embeddings.keys()
         ).astype(float)
-        self.method_used = "process_facenet"
+        self.method_used = "process_georgia_pipeline"
 
     # ---------- io ----------
     def dataframe(self) -> pd.DataFrame:
