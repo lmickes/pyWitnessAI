@@ -1,5 +1,6 @@
 import pandas as pd
-from typing import Tuple, Optional, Dict, Literal
+from typing import Tuple, Optional, Dict, Literal, Iterable
+import difflib
 
 ResponseType = Literal["suspectId", "designateId", "fillerId", "rejectId"]
 
@@ -60,6 +61,35 @@ class LineupIdentifier:
             return None, float("inf")
         idx = s.idxmin()
         return idx, float(s.loc[idx])
+
+    @staticmethod
+    def _build_roles_from_target(members: Iterable[str],
+                                 targetLineup: Literal["targetPresent", "targetAbsent"],
+                                 target: str) -> Dict[str, str]:
+        """
+        Based on lineup members + targetLineup + target to build roles dict.
+        """
+        if targetLineup not in ("targetPresent", "targetAbsent"):
+            raise ValueError("targetLineup must be 'targetPresent' or 'targetAbsent'.")
+
+        members = list(members)
+        if target not in members:
+            # Provide suggestions for possible typos
+            suggestion = difflib.get_close_matches(target, members, n=3)
+            msg = (
+                f"target '{target}' is not in the dataframe you provided.\n"
+                f"Available members are: {members}"
+            )
+            if suggestion:
+                msg += f"\n Do you mean: {suggestion}?"
+            raise ValueError(msg)
+
+        roles = {m: "filler" for m in members}
+        if targetLineup == "targetPresent":
+            roles[target] = "guilty_suspect"
+        else:  # targetLineup == "targetAbsent"
+            roles[target] = "innocent_suspect"
+        return roles
 
     def decide_macro(self, sim_df:  pd.DataFrame, roles: Dict[str, str]) -> Dict[str, object]:
         """
@@ -140,7 +170,7 @@ class LineupIdentifier:
             "confidence": (None if sel is None else conf),
         }
 
-    def decide(self, sim_df: pd.DataFrame, lineup_loader) -> Dict[str, object]:
+    def decide_for_pipeline(self, sim_df: pd.DataFrame, lineup_loader) -> Dict[str, object]:
         roles = self._role_map_from_lineuploader(lineup_loader)
         has_guilty = any(v=="guilty_suspect" for v in roles.values())
         has_innocent = any(v=="innocent_suspect" for v in roles.values())
@@ -166,7 +196,21 @@ class LineupIdentifier:
                 "confidence": (None if sel is None else conf)
             }
 
+    def decide(self, sim_df: pd.DataFrame) -> Dict[str, object]:
+        """
+        General interface when only sim_df is provided.
+        """
+        if self.targetLineup is None or self.target is None:
+            raise ValueError(
+                "Please set targetLineup ('targetPresent' or 'targetAbsent') and target (keep the name the same with sim_df columns)."
+            )
 
+        roles = self._build_roles_from_target(
+            members=sim_df.columns,
+            targetLineup=self.targetLineup,
+            target=self.target
+        )
+        return self.decide_tp_or_ta(sim_df, roles)
 
 
 
