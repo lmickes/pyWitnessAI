@@ -1,11 +1,47 @@
-data
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Build / dist
+build/
+dist/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE / tooling
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+
+# Project data/outputs (Retain or move data.gitkeep as needed)
+data/
+logs/
+outputs/
+reports/
+figures/
+models/
+checkpoints/
+
+# Media / large artifacts
+*.mp4
+*.mov
+*.avi
+*.zip
 *.egg
 *.egg-info
 *.jpg
-*.mp4
+*.jpeg
 *.pkl
 *.pdf
 .idea
-build
-*checkpoint*
-
