@@ -40,6 +40,11 @@ class VideoAnalyzer:
         self.find_probe_frames_detector = None
         self.find_probe_frames_method = None
 
+        self.face_gallery = {}  # {label: {"rep": np.ndarray, "samples": [(frame_idx, (x,y,w,h))], "thumb": [np.ndarray,...]}}
+        self.face_labels_by_frame = []  # Corresponding to frame_count, list of lists of labels per frame, in order
+        self._gallery_built_from = None  # Model used to build the gallery (e.g., 'mtcnn')
+        self._gallery_model_name = None  # Model name used for embeddings (e.g., 'Facenet512')
+
     def add_analyzer(self, analyzer):
         #  Add an external frame analyzer
         self.frame_analyzer[analyzer.name] = analyzer
@@ -110,6 +115,282 @@ class VideoAnalyzer:
 
     def run(self, frame_start=0, frame_end=100000):
         self.process_video(frame_start, frame_end)
+
+    def build_face_gallery(self, detector='mtcnn', model_name='Facenet512',
+                           max_distance=0.90, save_dir=None, max_samples_per_label=4):
+        """
+        Identify and cluster faces across all frames in the video. Label them as face1, face2, etc.
+
+        Parameters
+        ----------
+        detector: Choose which detector's output to use for cropping faces
+        model_name: DeepFace embedding
+        max_distance: The maximum distance threshold to consider two faces as the same person
+        save_dir: optional path to save the face gallery
+        max_samples_per_label: Each label will store up to this many face thumbnails
+        """
+        if detector not in self.frame_analyzer_output:
+            raise ValueError(f"Detector '{detector}' analyzer is not added or has no output.")
+
+        outputs = self.frame_analyzer_output[detector]
+        if len(outputs) != len(self.frame_count):
+            raise RuntimeError("Analyzer output length mismatch with frame_count. Did you run process_video()?")
+
+        self.face_gallery.clear()
+        self.face_labels_by_frame = [[] for _ in self.frame_count]
+        self._gallery_built_from = detector
+        self._gallery_model_name = model_name
+
+        # Reopen video to read frames
+        cap2 = cv.VideoCapture(self.video_path)
+        if not cap2.isOpened():
+            raise RuntimeError(f"Cannot reopen video: {self.video_path}")
+
+        current_frame_idx = -1
+        label_count = 0
+
+        while True:
+            ret, frame = cap2.read()
+            if not ret:
+                break
+            current_frame_idx += 1
+            if current_frame_idx >= len(outputs):
+                break
+
+            coords = outputs[current_frame_idx].get('coordinates', [])
+            if not coords:
+                self.face_labels_by_frame[current_frame_idx] = []
+                continue
+
+            per_frame_labels = []
+            for box in coords:
+                face_img = self._crop_face_from_frame(frame, box)
+                try:
+                    emb = self._represent_face(face_img, model_name=model_name)
+                except Exception:
+                    # embedding failed, skip this face
+                    per_frame_labels.append(None)
+                    continue
+
+                # Find the closest existing label
+                best_label = None
+                best_dist = float('inf')
+                for lbl, info in self.face_gallery.items():
+                    centroid = info['rep']
+                    dist = self._euclidean_distance(emb, centroid)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_label = lbl
+
+                # Make decision based on distance
+                if best_dist <= max_distance and best_label is not None:
+                    info = self.face_gallery[best_label]
+                    # Update centroid and samples
+                    new_centroid = self._update_centroid(info['rep'], emb, len(info['samples']))
+                    info['rep'] = new_centroid
+                    info['samples'].append((current_frame_idx, tuple(map(int, box))))
+                    # Add thumbnail if under limit
+                    if len(info['thumb']) < max_samples_per_label:
+                        thumb = cv.resize(face_img, (112, 112))
+                        info['thumb'].append(thumb)
+                    per_frame_labels.append(best_label)
+                else:
+                    # Create new label
+                    label_count += 1
+                    new_label = f"face{label_count}"
+                    self.face_gallery[new_label] = {
+                        "rep": emb,
+                        "samples": [(current_frame_idx, tuple(map(int, box)))],
+                        "thumb": [cv.resize(face_img, (112, 112))]
+                    }
+                    per_frame_labels.append(new_label)
+
+            self.face_labels_by_frame[current_frame_idx] = per_frame_labels
+
+        cap2.release()
+
+        # Optionally save the face gallery
+        if save_dir:
+            self.save_face_gallery(save_dir)
+
+        return self.face_gallery
+
+    def list_face_labels(self):
+        # List all identified face labels in the gallery
+        return list(self.face_gallery.keys())
+
+    def save_face_gallery(self, save_dir):
+        """
+        Save the face gallery to the specified directory (label, samples_count, first_seen_frame).
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        # Save thumbnails
+        for lbl, info in self.face_gallery.items():
+            thumbs = info.get("thumb", [])
+            for i, t in enumerate(thumbs):
+                path = os.path.join(save_dir, f"{lbl}_{i+1}.jpg")
+                cv.imwrite(path, t)
+
+        # Save index CSV
+        rows = []
+        for lbl, info in self.face_gallery.items():
+            samples = info.get("samples", [])
+            first_frame = samples[0][0] if samples else None
+            rows.append({
+                "label": lbl,
+                "samples_count": len(samples),
+                "first_seen_frame": first_frame
+            })
+        df = pd.DataFrame(rows).sort_values(by=["first_seen_frame", "label"])
+        df.to_csv(os.path.join(save_dir, "gallery_index.csv"), index=False)
+
+        # Record metadata
+        meta = {
+            "built_from_detector": self._gallery_built_from,
+            "embedding_model": self._gallery_model_name,
+            "total_labels": len(self.face_gallery)
+        }
+        pd.DataFrame([meta]).to_csv(os.path.join(save_dir, "gallery_meta.csv"), index=False)
+        print(f"Face gallery saved to: {save_dir}")
+
+    def filter_faces(self, detector=None, keep=None, remove=None):
+        """
+        Filter faces based on their labels in the face_gallery from the analyzer output (in-place modification).
+
+        Parameters
+        ----------
+        detector: Which detector's output to filter (default is the one used to build the gallery)
+        keep: Only keep these labels (list/tuple/set)
+        remove: Remove these labels (list/tuple/set)
+        """
+        if detector is None:
+            detector = self._gallery_built_from
+        if detector not in self.frame_analyzer_output:
+            raise ValueError(f"Detector '{detector}' analyzer is not added or has no output.")
+        if not self.face_labels_by_frame:
+            raise RuntimeError("No face_labels_by_frame. Did you run build_face_gallery()?")
+
+        if keep and remove:
+            raise ValueError("keep and remove cannot be used together.")
+
+        keep_set = set(keep) if keep else None
+        remove_set = set(remove) if remove else None
+
+        outputs = self.frame_analyzer_output[detector]
+        for i in range(len(outputs)):
+            data = outputs[i]
+            coords = data.get('coordinates', [])
+            confs = data.get('confidence', [])
+
+            labels_this_frame = self.face_labels_by_frame[i] if i < len(self.face_labels_by_frame) else []
+            if not coords or not labels_this_frame:
+                # 该帧无脸，或未标注
+                outputs[i] = {
+                    'face_count': 0,
+                    'face_area': 0,
+                    'confidence': [],
+                    'average_confidence': 0 if 'average_confidence' in data else [],
+                    'coordinates': []
+                }
+                continue
+
+            # The boolean mask to decide which faces to keep
+            keep_mask = []
+            for lbl in labels_this_frame:
+                if lbl is None:
+                    keep_mask.append(False)
+                elif keep_set is not None:
+                    keep_mask.append(lbl in keep_set)
+                elif remove_set is not None:
+                    keep_mask.append(lbl not in remove_set)
+                else:
+                    keep_mask.append(True)  # If neither keep nor remove is specified, keep all
+
+            # Filter coordinates and confidences
+            new_coords = [c for c, k in zip(coords, keep_mask) if k]
+            new_confs = [c for c, k in zip(confs, keep_mask) if k]
+
+            # Calculate new face area and average confidence
+            new_face_area = sum(int(b[2]) * int(b[3]) for b in new_coords) if new_coords else 0
+            if 'average_confidence' in data:
+                avg_conf = float(np.mean(new_confs)) if len(new_confs) > 0 else 0
+                new_data = {
+                    'face_count': len(new_coords),
+                    'face_area': new_face_area,
+                    'coordinates': new_coords,
+                    'confidence': new_confs,
+                    'average_confidence': avg_conf
+                }
+            else:
+                new_data = {
+                    'face_count': len(new_coords),
+                    'face_area': new_face_area,
+                    'coordinates': new_coords,
+                    'confidence': new_confs
+                }
+            outputs[i] = new_data
+
+        print(f"Filtering done on detector '{detector}'.")
+
+    def show_gallery_contact_sheet(self, save_path=None, cols=8, thumb_size=(112, 112), show_window=False, window_name='Face Gallery'):
+        """
+        Build contact sheet of the face gallery.
+
+        Parameters
+        ----------
+        save_path: If provided, save the contact sheet image to this path
+        cols: Number of columns in the contact sheet
+        thumb_size: Size of each thumbnail (width, height).
+        show_window: If True, show the contact sheet using OpenCV window
+        """
+        if not self.face_gallery:
+            raise RuntimeError("face_gallery is empty. Please run build_face_gallery() first.")
+
+        thumbs = []
+        labels = []
+        for lbl, info in self.face_gallery.items():
+            # Take the first thumbnail available
+            if info.get("thumb"):
+                thumbs.append(info["thumb"][0])
+                labels.append(lbl)
+
+        if not thumbs:
+            print("No thumbnails available in the gallery.")
+            return None
+
+        # Uniformly resize thumbnails and add labels
+        th, tw = thumb_size[1], thumb_size[0]
+        norm_thumbs = []
+        for img in thumbs:
+            t = cv.resize(img, (tw, th))
+            # Label bar
+            bar_h = 18
+            canvas = np.full((th + bar_h, tw, 3), 245, dtype=np.uint8)
+            canvas[:th, :, :] = t
+            cv.putText(canvas, labels[len(norm_thumbs)], (4, th + 14), cv.FONT_HERSHEY_SIMPLEX, 0.45, (0,0,0), 1, cv.LINE_AA)
+            norm_thumbs.append(canvas)
+
+        rows = int(np.ceil(len(norm_thumbs) / float(cols)))
+        cell_h, cell_w = norm_thumbs[0].shape[:2]
+        sheet = np.full((rows * cell_h, cols * cell_w, 3), 255, dtype=np.uint8)
+
+        for idx, img in enumerate(norm_thumbs):
+            r = idx // cols
+            c = idx % cols
+            y1, y2 = r * cell_h, (r + 1) * cell_h
+            x1, x2 = c * cell_w, (c + 1) * cell_w
+            sheet[y1:y2, x1:x2, :] = img
+
+        if save_path:
+            cv.imwrite(save_path, sheet)
+            print(f"Contact sheet saved to: {save_path}")
+
+        if show_window:
+            cv.imshow(window_name, sheet)
+            cv.waitKey(0)
+            cv.destroyWindow(window_name)
+
+        return sheet
 
     def find_probe_frames(self, top_n=1, log_file='probe_frames_log.txt', detector='mtcnn', method='confidence'):
         save_directory = f'{self.save_directory}/probe_frames/{detector}_{method}_probe_frames'
@@ -448,6 +729,37 @@ class VideoAnalyzer:
 
         df.to_csv(os.path.join(directory, f'{prefix}_data.csv'), index=False)
 
+    # ---------- Face Gallery: toolkit ----------
+    @staticmethod
+    def _crop_face_from_frame(frame, box):
+        x, y, w, h = map(int, box)
+        h_img, w_img = frame.shape[:2]
+        x = max(0, min(x, w_img - 1))
+        y = max(0, min(y, h_img - 1))
+        w = max(1, min(w, w_img - x))
+        h = max(1, min(h, h_img - y))
+        return frame[y:y+h, x:x+w]
+
+    @staticmethod
+    def _l2_normalize(v):
+        n = np.linalg.norm(v)
+        return v if n == 0 else v / n
+
+    @staticmethod
+    def _euclidean_distance(a, b):
+        return np.linalg.norm(a - b)
+
+    def _represent_face(self, face_img_bgr, model_name='Facenet'):
+        # DeepFace 期望 RGB
+        face_rgb = cv.cvtColor(face_img_bgr, cv.COLOR_BGR2RGB)
+        reps = DeepFace.represent(face_rgb, model_name=model_name, enforce_detection=False)
+        emb = np.array(reps[0]['embedding'], dtype=np.float32)
+        return self._l2_normalize(emb)
+
+    def _update_centroid(self, old, new, count_old):
+        # Update centroid with new embedding
+        return self._l2_normalize((old * count_old + new) / (count_old + 1))
+
 
 class FrameProcessorCropper:
     def __init__(self, x1, x2, y1, y2, name='cropper'):
@@ -490,7 +802,7 @@ class FrameProcessorNormalizer:
         set_range = self.set_max - self.set_min
 
         #  Convert the frame to float for computation
-        frame = frame.astaype('float32')
+        frame = frame.astype('float32')
 
         #  Create a matrix filled with minimum pixel value of the frame
         matrix_frame_min = np.full(frame.shape, frame_min, dtype='float32')
@@ -533,12 +845,13 @@ class FrameProcessorVideoWriter:
         self.output_path = output_path
         self.out_video_writer = None
         self.name = name
+        self.fps = None  # You can set a default fps if needed
 
     def process_frame(self, frame):
         if self.out_video_writer is None:
             height, width, _ = frame.shape
             fourcc = cv.VideoWriter_fourcc(*'mp4v')
-            fps = 30
+            fps = self.fps or 30
             self.out_video_writer = cv.VideoWriter(self.output_path, fourcc, fps, (width, height))
 
         self.out_video_writer.write(frame)
@@ -556,7 +869,10 @@ class FrameProcessorDisplayer:
         self.window_name = window_name
         cv.namedWindow(window_name, cv.WINDOW_NORMAL)
         self.name = name
-        self.bounding_box = box
+        self.bounding_box = bool(box)
+        self.detector_Haar =  cv.CascadeClassifier(
+                'E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml')
+        cv.namedWindow(window_name, cv.WINDOW_NORMAL)
 
     def plot_rectangle(self, frame, faces):
         # There are 4 values in face array, x,y,h(eight),w(idth)
@@ -565,14 +881,11 @@ class FrameProcessorDisplayer:
         return frame
 
     def process_frame(self, frame):
-        if self.bounding_box == 'True':
-            detector_Haar = cv.CascadeClassifier(
-                'E:/Project.Pycharm/FaceDetection/Face_detection/Models/haarcascade_frontalface_alt.xml')
-            GRAY = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-            # Face detection
-            faces_Haar = detector_Haar.detectMultiScale(GRAY, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-            img_bbox = self.plot_rectangle(frame.copy(), faces_Haar)
-            cv.imshow(self.window_name, img_bbox)
+        if self.bounding_box:
+            gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            faces = self.detector_Haar.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            frame = self.plot_rectangle(frame.copy(), faces)
+            cv.imshow(self.window_name, frame)
         else:
             cv.imshow(self.window_name, frame)
 
@@ -637,7 +950,8 @@ class FrameAnalyzerMTCNNIndependent:
 
     def analyze_frame(self, frame):
         self.detected_faces = []
-        faces = self.detector.detect_faces(frame)
+        rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        faces = self.detector.detect_faces(rgb)
 
         #  Faces and coordinates transfer
         frame_results = {
