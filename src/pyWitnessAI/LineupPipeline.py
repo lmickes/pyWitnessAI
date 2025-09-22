@@ -32,9 +32,7 @@ def export_for_pywitness(
     """
     Convert a long-form pipeline CSV into a minimal pyWitness-ready CSV.
 
-    Input expectations (long-form):
-        - Columns include (at least) the per-frame summary fields:
-          TA_responseType, TP_responseType, TA_conf, TP_conf
+    Input expectations: Columns include the per-frame summary fields (TA_responseType, TP_responseType, TA_conf, TP_conf)
 
     Parameters
     ------
@@ -51,11 +49,35 @@ def export_for_pywitness(
     """
     df = pd.read_csv(input_csv)
 
+    if targetLineup is None:
+        targetLineup = "both"
+
     # Sanity checks
     need_cols = {"TA_responseType","TP_responseType","TA_conf","TP_conf"}
     missing = [c for c in need_cols if c not in df.columns]
     if missing:
         raise ValueError(f"Input CSV is missing required columns: {missing}")
+
+    has_guilty = False
+    has_innocent = False
+
+    # Check if guilty_suspect and innocent_suspect exist in the data
+    cols = [str(c) for c in df.columns]
+    dist_cols = [c for c in cols if c.startswith("dist[")]
+    if dist_cols:
+        has_guilty   = any("[guilty_suspect]"   in c for c in dist_cols)
+        has_innocent = any("[innocent_suspect]" in c for c in dist_cols)
+
+    # When data is not wide-form, check "role" column
+    if ("role" in df.columns) and (not dist_cols):
+        unique_roles = set(df["role"].dropna().unique().tolist())
+        has_guilty   = has_guilty   or ("guilty_suspect"   in unique_roles)
+        has_innocent = has_innocent or ("innocent_suspect" in unique_roles)
+
+    effective_lineup_size_both = int(lineupSize) - 1 if (has_guilty and has_innocent) else int(lineupSize)
+    # Avoid non-positive lineup size
+    if effective_lineup_size_both < 1:
+        effective_lineup_size_both = 1
 
     # We want one output row per group (frame, probe)
     group_keys = [c for c in ["frame", "probe"] if c in df.columns]
@@ -90,8 +112,8 @@ def export_for_pywitness(
         elif targetLineup == "targetAbsent":
             emit_row(ta_resp, ta_conf, "targetAbsent")
         elif targetLineup == "both":
-            emit_row(tp_resp, tp_conf, "targetPresent")
-            emit_row(ta_resp, ta_conf, "targetAbsent")
+            emit_row(tp_resp, tp_conf, "targetPresent", effective_lineup_size_both)
+            emit_row(ta_resp, ta_conf, "targetAbsent", effective_lineup_size_both)
         else:
             raise ValueError("targetLineup must be 'targetPresent', 'targetAbsent', or 'both'.")
 
@@ -355,10 +377,15 @@ class VideoLineupPipeline:
             df.to_csv(output_csv, index=False)
         if export_pywitness:
             df.to_csv(output_csv, index=False)
+            checked_target = (
+                self.identifier_obj.targetLineup
+                if (self.identifier_obj and self.identifier_obj.targetLineup in ("targetPresent", "targetAbsent"))
+                else "both"
+            )
             export_for_pywitness(
                 input_csv=output_csv,
                 output_csv=output_csv.replace(".csv", "_pywitness.csv"),
-                targetLineup=self.identifier_obj.targetLineup if self.identifier_obj else "both",
+                targetLineup=checked_target,
                 lineupSize=len(self.lineup_loader.lineup),
             )
             # return output_csv if not return_df else df
