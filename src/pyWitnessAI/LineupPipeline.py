@@ -17,8 +17,8 @@ class PipelineConfig:
     normalization: str = "base"
     enforce_detection: bool = False
     show_progress: bool = False
-    # Use full frame or mtcnn to detect faces in each frame of the video
-    detect_faces: Literal["fullframe", "mtcnn"] = "fullframe"
+    # Use full frame or mtcnn detected faces in each frame of the video to compare with lineup members
+    pre_detect_faces: Literal["fullframe", "mtcnn"] = "fullframe"
     # Fallback distance when no face detected in a frame, preferably with detect_faces as "mtcnn"
     no_face_fill: float = 50.0
 
@@ -180,53 +180,109 @@ class VideoLineupPipeline:
 
     def _has_face(self, pil_img: Image.Image) -> bool:
         """
-        Lightweight face presence check using the configured backend.
-        - If backend == 'mtcnn': reuse analyzer's MTCNN (fast, no extra deps).
-        - Else: use DeepFace.extract_faces with the chosen backend.
+        Face presence check that matches the configured analyzer_method:
+        - process_georgia_pipeline -> MTCNN (facenet-pytorch)
+        - process/process_verify   -> DeepFace.represent(detector_backend=cfg.backend)
+        - fallback                 -> DeepFace.extract_faces
         Returns True if at least one face is detected, else False.
         """
+        method = getattr(self.cfg, "analyzer_method", "process")
         backend = getattr(self.cfg, "backend", "mtcnn")
+        show = bool(getattr(self.cfg, "show_progress", False))
 
-        # Fast path for MTCNN
-        if str(backend).lower() == "mtcnn":
+        # Helper: silence stdout/stderr when show_progress is False
+        def _maybe_silent(callable_, *args, **kwargs):
+            if show:
+                return callable_(*args, **kwargs)
+            with io.StringIO() as _buf1, io.StringIO() as _buf2, redirect_stdout(_buf1), redirect_stderr(_buf2):
+                return callable_(*args, **kwargs)
+
+        # 1. Georgia pipeline: use MTCNN detection
+        # Ensure analyzer's mtcnn exists and matches current show_progress
+        if method == "process_georgia_pipeline":
             try:
+                # Recreate MTCNN if show_progress changed
                 boxes, probs = self._analyzer_template.mtcnn.detect(pil_img)
                 if boxes is None or probs is None:
                     return False
+                return True
                 w, h = pil_img.size
                 img_area = float(w * h)
-                min_area = 0.01 * img_area
-                max_area = 0.80 * img_area
                 for (x1, y1, x2, y2), p in zip(boxes, probs):
                     if p is None:
                         continue
                     area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1))
-                    if p >= 0.90 and (min_area <= area <= max_area):  # 置信度/面积双阈值
+                    if (p >= 0.90) and (0.01 * img_area <= area <= 0.80 * img_area):
                         return True
                 return False
             except Exception:
                 return False
 
-        # Generic path for other backends supported by DeepFace
+        # 2 DeepFace.represent path for process / process_verify
+        if method in ("process", "process_verify"):
+            try:
+                arr = np.array(pil_img)
+                # Use represent to keep consistent with analyzer settings
+                reps = _maybe_silent(
+                    DeepFace.represent,
+                    arr,
+                    model_name=self._analyzer_template.model,
+                    detector_backend=backend,
+                    enforce_detection=self._analyzer_template.enforce_detection,
+                    align=self._analyzer_template.align,
+                    normalization=self._analyzer_template.normalization
+                )
+                if not reps:
+                    return False
+
+                return True
+                # If there is facial_area/region info, use it to filter out too small/large faces
+                w, h = pil_img.size
+                img_area = float(w * h)
+                min_area = 0.01 * img_area
+                max_area = 0.80 * img_area
+                ok = False
+                for r in reps:
+                    fa = r.get("facial_area") or r.get("region") or {}
+                    if isinstance(fa, dict):
+                        rw = float(fa.get("w", 0.0))
+                        rh = float(fa.get("h", 0.0))
+                        area = rw * rh
+                        if min_area <= area <= max_area:
+                            ok = True
+                            break
+                    else:
+                        # If no region info, just accept it
+                        ok = True
+                        break
+                return ok
+            except Exception:
+                return False
+
+        # 3 Fallback: DeepFace.extract_faces
         try:
             arr = np.array(pil_img)
-            faces = DeepFace.extract_faces(
+            faces = _maybe_silent(
+                DeepFace.extract_faces,
                 img_path=arr,
                 detector_backend=backend,
                 enforce_detection=False
-            )
-            for f in faces or []:
+            ) or []
+            if not faces:
+                return False
+            return True
+            w, h = pil_img.size
+            img_area = float(w * h)
+            min_area = 0.01 * img_area
+            max_area = 0.80 * img_area
+            for f in faces:
                 conf = float(f.get("confidence", 0.0))
                 region = f.get("facial_area") or f.get("region") or {}
-                w, h = pil_img.size
-                img_area = float(w * h)
                 if isinstance(region, dict):
-                    rw = float(region.get("w", 0.0))
-                    rh = float(region.get("h", 0.0))
-                    area = rw * rh
+                    area = float(region.get("w", 0.0)) * float(region.get("h", 0.0))
                 else:
                     area = 0.0
-                if conf >= 0.90 and area >= 0.01 * img_area and area <= 0.80 * img_area:
+                if (conf >= 0.90) and (min_area <= area <= max_area):
                     return True
             return False
         except Exception:
@@ -241,7 +297,7 @@ class VideoLineupPipeline:
         img_rgb = cv.cvtColor(frame_bgr, cv.COLOR_BGR2RGB)
         pil = Image.fromarray(img_rgb)
 
-        if self.cfg.detect_faces == "fullframe":
+        if self.cfg.pre_detect_faces == "fullframe":
             if self._has_face(pil):
                 return [pil]
             else:
@@ -397,7 +453,8 @@ class VideoLineupPipeline:
                 continue
 
             faces = self._faces_from_frame(frame)  # List[PIL.Image]
-            print(f"[DEBUG] frame={logical_frame_idx}, detected_faces={len(faces)}, mode={self.cfg.detect_faces}")
+
+            # print(f"[DEBUG] frame={logical_frame_idx}, detected_faces={len(faces)}, mode={self.cfg.pre_detect_faces}")
 
             if len(faces) == 0:
                 # Avoid None as index when it is passed to pivot_table
