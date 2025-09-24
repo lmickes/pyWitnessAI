@@ -94,12 +94,12 @@ def export_for_pywitness(
 
     out_rows = []
 
-    def emit_row(resp: str, conf, tl: str):
+    def emit_row(resp: str, conf, tl: str, lineup_size=None):
         out_rows.append({
             "responseType": resp if pd.notna(resp) else None,
             "confidence":   float(conf) if pd.notna(conf) else None,
             "targetLineup": tl,
-            "lineupSize":   int(lineupSize),
+            "lineupSize":   int(lineup_size if lineup_size is not None else lineupSize),
         })
 
     # For each summary row, emit one or two output rows depending on targetLineup
@@ -287,7 +287,6 @@ class VideoLineupPipeline:
 
     def run(self,
             output_csv: Optional[str] = None,
-            return_df: bool = False,
             wide: bool = True,
             export_pywitness: bool = False,):
         cap = cv.VideoCapture(self.video_path)
@@ -388,5 +387,4 @@ class VideoLineupPipeline:
                 targetLineup=checked_target,
                 lineupSize=len(self.lineup_loader.lineup),
             )
-            # return output_csv if not return_df else df
         return df
