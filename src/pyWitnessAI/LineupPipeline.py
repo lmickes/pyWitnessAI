@@ -74,7 +74,7 @@ def export_for_pywitness(
         has_guilty   = has_guilty   or ("guilty_suspect"   in unique_roles)
         has_innocent = has_innocent or ("innocent_suspect" in unique_roles)
 
-    effective_lineup_size_both = int(lineupSize) - 1 if (has_guilty and has_innocent) else int(lineupSize)
+    effective_lineup_size_both = int(lineupSize) - 1 if (targetLineup == "both") else int(lineupSize)
     # Avoid non-positive lineup size
     if effective_lineup_size_both < 1:
         effective_lineup_size_both = 1
@@ -288,19 +288,54 @@ class VideoLineupPipeline:
     def run(self,
             output_csv: Optional[str] = None,
             wide: bool = True,
-            export_pywitness: bool = False,):
+            export_pywitness: bool = False,
+            frame_start: int = 0,
+            frame_end: Optional[int] = None,
+            frame_stride: int = 1):
         cap = cv.VideoCapture(self.video_path)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open video: {self.video_path}")
 
+        n_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT)) or 0
+        if n_frames <= 0:
+            n_frames = 10 ** 12
+
+        # Support negative indexing for frame_start and frame_end
+        if frame_start < 0:
+            frame_start = max(0, n_frames + frame_start)
+        if frame_end is None:
+            frame_end = n_frames - 1
+        elif frame_end < 0:
+            frame_end = max(-1, n_frames + frame_end)
+
+        frame_start = max(0, frame_start)
+        frame_end = max(-1, frame_end)
+        if frame_end >= 0:
+            frame_end = min(frame_end, n_frames - 1)
+
+        if frame_start > frame_end and frame_end >= 0:
+            # If start > end (and end is valid), no frames to process
+            return pd.DataFrame()
+
+        frame_stride = max(1, int(frame_stride))
+
+        # Set the video to start frame
+        cap.set(cv.CAP_PROP_POS_FRAMES, frame_start)
+
         records = []
-        frame_idx = -1
+        logical_frame_idx = frame_start - 1
 
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
-            frame_idx += 1
+            logical_frame_idx += 1
+
+            if logical_frame_idx > frame_end:
+                break
+
+            if (logical_frame_idx - frame_start) % frame_stride != 0:
+                continue
 
             faces = self._faces_from_frame(frame)  # List[PIL.Image]
             if len(faces) == 0:
@@ -309,7 +344,7 @@ class VideoLineupPipeline:
                     role = self.roles.get(lm_name, "filler")
 
                     base_row = {
-                        "frame": frame_idx,
+                        "frame": logical_frame_idx,
                         "probe": None,
                         "lineup_member": lm_name,
                         "distance": float(self.cfg.no_face_fill),  # Fill fixed value when no face detected
@@ -329,7 +364,7 @@ class VideoLineupPipeline:
                 continue
 
             # Build column images for the frame
-            probe_names = [f"frame{frame_idx}_face{i}" for i in range(len(faces))]
+            probe_names = [f"frame{logical_frame_idx}_face{i}" for i in range(len(faces))]
             col_il = ImageLoader([])
             col_il.images = {n: im for n, im in zip(probe_names, faces)}
             col_il.path_to_images = {n: f"{n}.png" for n in probe_names}  # Virtual paths
@@ -357,7 +392,7 @@ class VideoLineupPipeline:
                 for lm_name, dist in row.items():
                     role = self.roles.get(lm_name, "filler")
                     base_row = {
-                        "frame": frame_idx,
+                        "frame": logical_frame_idx,
                         "probe": probe,
                         "lineup_member": lm_name,
                         "distance": (None if pd.isna(dist) else float(dist)),
