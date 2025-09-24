@@ -178,6 +178,60 @@ class VideoLineupPipeline:
             show_progress=self.cfg.show_progress
         )
 
+    def _has_face(self, pil_img: Image.Image) -> bool:
+        """
+        Lightweight face presence check using the configured backend.
+        - If backend == 'mtcnn': reuse analyzer's MTCNN (fast, no extra deps).
+        - Else: use DeepFace.extract_faces with the chosen backend.
+        Returns True if at least one face is detected, else False.
+        """
+        backend = getattr(self.cfg, "backend", "mtcnn")
+
+        # Fast path for MTCNN
+        if str(backend).lower() == "mtcnn":
+            try:
+                boxes, probs = self._analyzer_template.mtcnn.detect(pil_img)
+                if boxes is None or probs is None:
+                    return False
+                w, h = pil_img.size
+                img_area = float(w * h)
+                min_area = 0.01 * img_area
+                max_area = 0.80 * img_area
+                for (x1, y1, x2, y2), p in zip(boxes, probs):
+                    if p is None:
+                        continue
+                    area = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1))
+                    if p >= 0.90 and (min_area <= area <= max_area):  # 置信度/面积双阈值
+                        return True
+                return False
+            except Exception:
+                return False
+
+        # Generic path for other backends supported by DeepFace
+        try:
+            arr = np.array(pil_img)
+            faces = DeepFace.extract_faces(
+                img_path=arr,
+                detector_backend=backend,
+                enforce_detection=False
+            )
+            for f in faces or []:
+                conf = float(f.get("confidence", 0.0))
+                region = f.get("facial_area") or f.get("region") or {}
+                w, h = pil_img.size
+                img_area = float(w * h)
+                if isinstance(region, dict):
+                    rw = float(region.get("w", 0.0))
+                    rh = float(region.get("h", 0.0))
+                    area = rw * rh
+                else:
+                    area = 0.0
+                if conf >= 0.90 and area >= 0.01 * img_area and area <= 0.80 * img_area:
+                    return True
+            return False
+        except Exception:
+            return False
+
     def _faces_from_frame(self, frame_bgr: np.ndarray) -> List[Image.Image]:
         """
         Return a list of PIL faces for this frame.
@@ -186,8 +240,13 @@ class VideoLineupPipeline:
         """
         img_rgb = cv.cvtColor(frame_bgr, cv.COLOR_BGR2RGB)
         pil = Image.fromarray(img_rgb)
+
         if self.cfg.detect_faces == "fullframe":
-            return [pil]
+            if self._has_face(pil):
+                return [pil]
+            else:
+                return []
+
         # mtcnn path (use analyzer's MTCNN to avoid new deps)
         face = self._analyzer_template.mtcnn(pil)  # torch.Tensor [3,H,W] in [0,1], or None
         if face is None:
@@ -338,14 +397,18 @@ class VideoLineupPipeline:
                 continue
 
             faces = self._faces_from_frame(frame)  # List[PIL.Image]
+            print(f"[DEBUG] frame={logical_frame_idx}, detected_faces={len(faces)}, mode={self.cfg.detect_faces}")
+
             if len(faces) == 0:
+                # Avoid None as index when it is passed to pivot_table
+                noface_probe = f"frame{logical_frame_idx}_noface"
                 for lm_path in self.lineup_loader.lineup:
                     lm_name = lm_path.split("/")[-1].split("\\")[-1].rsplit(".", 1)[0]
                     role = self.roles.get(lm_name, "filler")
 
                     base_row = {
                         "frame": logical_frame_idx,
-                        "probe": None,
+                        "probe": noface_probe,
                         "lineup_member": lm_name,
                         "distance": float(self.cfg.no_face_fill),  # Fill fixed value when no face detected
                         "role": role,
