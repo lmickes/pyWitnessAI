@@ -17,8 +17,8 @@ class PipelineConfig:
     normalization: str = "base"
     enforce_detection: bool = False
     show_progress: bool = False
-    # Use full frame or mtcnn detected faces in each frame of the video to compare with lineup members
-    pre_detect_faces: Literal["fullframe", "mtcnn"] = "fullframe"
+    # Use full frame or detected faces in each frame of the video to compare with lineup members
+    use_full_frame: bool = True
     # Fallback distance when no face detected in a frame, preferably with detect_faces as "mtcnn"
     no_face_fill: float = 50.0
 
@@ -28,6 +28,7 @@ def export_for_pywitness(
     output_csv: Optional[str] = None,
     targetLineup: Literal["targetPresent", "targetAbsent", "both"] = "both",
     lineupSize: int = 6,
+    no_face_fill: Optional[float] = None,
 ) -> str:
     """
     Convert a long-form pipeline CSV into a minimal pyWitness-ready CSV.
@@ -92,6 +93,16 @@ def export_for_pywitness(
         summary["__dummy__"] = 0
         group_keys = ["__dummy__"]
 
+    def _fallback(row):
+        base_resp = row.get("responseType")
+        base_conf = row.get("confidence")
+        resp = (base_resp if pd.notna(base_resp) else "fillerId")
+        if pd.notna(base_conf):
+            conf = float(base_conf)
+        else:
+            conf = float(no_face_fill if no_face_fill is not None else 50.0)
+        return resp, conf
+
     out_rows = []
 
     def emit_row(resp: str, conf, tl: str, lineup_size=None):
@@ -107,13 +118,36 @@ def export_for_pywitness(
         ta_resp, ta_conf = row.get("TA_responseType"), row.get("TA_conf")
         tp_resp, tp_conf = row.get("TP_responseType"), row.get("TP_conf")
 
+        # Check if both TA and TP responses are missing
+        is_no_face_like = (pd.isna(ta_resp) and pd.isna(tp_resp) and pd.isna(ta_conf) and pd.isna(tp_conf))
+
         if targetLineup == "targetPresent":
-            emit_row(tp_resp, tp_conf, "targetPresent")
+            resp, conf = (tp_resp, tp_conf)
+            if pd.isna(resp) or pd.isna(conf):
+                if is_no_face_like:
+                    resp, conf = _fallback(row)
+            emit_row(resp, conf, "targetPresent")
+
         elif targetLineup == "targetAbsent":
-            emit_row(ta_resp, ta_conf, "targetAbsent")
+            resp, conf = (ta_resp, ta_conf)
+            if pd.isna(resp) or pd.isna(conf):
+                if is_no_face_like:
+                    resp, conf = _fallback(row)
+            emit_row(resp, conf, "targetAbsent")
+
         elif targetLineup == "both":
-            emit_row(tp_resp, tp_conf, "targetPresent", effective_lineup_size_both)
-            emit_row(ta_resp, ta_conf, "targetAbsent", effective_lineup_size_both)
+            resp_tp, conf_tp = (tp_resp, tp_conf)
+            if pd.isna(resp_tp) or pd.isna(conf_tp):
+                if is_no_face_like:
+                    resp_tp, conf_tp = _fallback(row)
+            emit_row(resp_tp, conf_tp, "targetPresent", effective_lineup_size_both)
+
+            resp_ta, conf_ta = (ta_resp, ta_conf)
+            if pd.isna(resp_ta) or pd.isna(conf_ta):
+                if is_no_face_like:
+                    resp_ta, conf_ta = _fallback(row)
+            emit_row(resp_ta, conf_ta, "targetAbsent", effective_lineup_size_both)
+
         else:
             raise ValueError("targetLineup must be 'targetPresent', 'targetAbsent', or 'both'.")
 
@@ -297,18 +331,76 @@ class VideoLineupPipeline:
         img_rgb = cv.cvtColor(frame_bgr, cv.COLOR_BGR2RGB)
         pil = Image.fromarray(img_rgb)
 
-        if self.cfg.pre_detect_faces == "fullframe":
+        if self.cfg.use_full_frame:
             if self._has_face(pil):
                 return [pil]
             else:
                 return []
 
-        # mtcnn path (use analyzer's MTCNN to avoid new deps)
-        face = self._analyzer_template.mtcnn(pil)  # torch.Tensor [3,H,W] in [0,1], or None
-        if face is None:
+        method = getattr(self.cfg, "analyzer_method", "process")
+        backend = getattr(self.cfg, "backend", "mtcnn")
+
+        # Pre-check if there is at least one face
+        if not self._has_face(pil):
             return []
-        face_np = (face.permute(1, 2, 0).numpy() * 255.0).clip(0, 255).astype("uint8")
-        return [Image.fromarray(face_np)]
+
+        faces: List[Image.Image] = []
+
+        if method == "process_georgia_pipeline":
+            try:
+                boxes, probs = self._analyzer_template.mtcnn.detect(pil)
+                if boxes is None or probs is None:
+                    return []
+                # Filter boxes by size/prob if needed
+                for (x1, y1, x2, y2), p in zip(boxes, probs):
+                    if p is None:
+                        continue
+                    crop = pil.crop((int(x1), int(y1), int(x2), int(y2))).convert("RGB")
+                    faces.append(crop)
+            except Exception:
+                return []
+
+        else:
+            # DeepFace path for process / process_verify / fallback
+            try:
+                arr = np.array(pil)
+                dets = DeepFace.extract_faces(
+                    img_path=arr,
+                    detector_backend=backend,
+                    enforce_detection=False
+                ) or []
+
+                for d in dets:
+                    face_arr = d.get("face")
+                    region = d.get("facial_area") or d.get("region")
+                    if face_arr is not None:
+                        np_face = np.asarray(face_arr)
+                        if np_face.ndim == 3:
+                            if np_face.max() <= 1.0:
+                                np_face = (np_face * 255.0).clip(0, 255).astype("uint8")
+                            else:
+                                np_face = np_face.astype("uint8")
+                            faces.append(Image.fromarray(np_face).convert("RGB"))
+                        else:
+                            # Fallback to region cropping if face_arr is not HWC
+                            if isinstance(region, dict):
+                                x = int(region.get("x", 0));
+                                y = int(region.get("y", 0))
+                                w = int(region.get("w", 0));
+                                h = int(region.get("h", 0))
+                                if w > 0 and h > 0:
+                                    faces.append(pil.crop((x, y, x + w, y + h)).convert("RGB"))
+                    elif isinstance(region, dict):
+                        x = int(region.get("x", 0));
+                        y = int(region.get("y", 0))
+                        w = int(region.get("w", 0));
+                        h = int(region.get("h", 0))
+                        if w > 0 and h > 0:
+                            faces.append(pil.crop((x, y, x + w, y + h)).convert("RGB"))
+            except Exception:
+                return []
+
+        return faces
 
     def _normalize_summary(self, summary: Dict[str, object]) -> Dict[str, object]:
         """
@@ -541,5 +633,6 @@ class VideoLineupPipeline:
                 output_csv=output_csv.replace(".csv", "_pywitness.csv"),
                 targetLineup=checked_target,
                 lineupSize=len(self.lineup_loader.lineup),
+                no_face_fill=float(self.cfg.no_face_fill),  # ← 新增
             )
         return df
