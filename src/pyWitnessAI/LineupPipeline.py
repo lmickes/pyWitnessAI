@@ -24,7 +24,7 @@ class PipelineConfig:
 
 
 def export_for_pywitness(
-    input_csv: str,
+    df: pd.DataFrame,
     output_csv: Optional[str] = None,
     targetLineup: Literal["targetPresent", "targetAbsent", "both"] = "both",
     lineupSize: int = 6,
@@ -48,8 +48,6 @@ def export_for_pywitness(
     Output schema:
         responseType, confidence, targetLineup, lineupSize
     """
-    df = pd.read_csv(input_csv)
-
     if targetLineup is None:
         targetLineup = "both"
 
@@ -154,8 +152,7 @@ def export_for_pywitness(
     out = pd.DataFrame(out_rows, columns=["responseType","confidence","targetLineup","lineupSize"])
 
     if output_csv is None:
-        base, ext = os.path.splitext(input_csv)
-        output_csv = f"{base}_pywitness.csv"
+        output_csv = "videoLineupResults_pywitness.csv"
 
     out.to_csv(output_csv, index=False)
     return output_csv
@@ -493,9 +490,6 @@ class VideoLineupPipeline:
         return out
 
     def run(self,
-            output_csv: Optional[str] = None,
-            wide: bool = True,
-            export_pywitness: bool = False,
             frame_start: int = 0,
             frame_end: Optional[int] = None,
             frame_stride: int = 1):
@@ -617,22 +611,54 @@ class VideoLineupPipeline:
 
         cap.release()
         df = pd.DataFrame.from_records(records)
+        wide: bool = True
         if wide:
             df = self._long_to_wide(df, by=("frame", "probe"))
-        if output_csv:
-            df.to_csv(output_csv, index=False)
-        if export_pywitness:
-            df.to_csv(output_csv, index=False)
-            checked_target = (
-                self.identifier_obj.targetLineup
-                if (self.identifier_obj and self.identifier_obj.targetLineup in ("targetPresent", "targetAbsent"))
-                else "both"
-            )
-            export_for_pywitness(
-                input_csv=output_csv,
-                output_csv=output_csv.replace(".csv", "_pywitness.csv"),
-                targetLineup=checked_target,
-                lineupSize=len(self.lineup_loader.lineup),
-                no_face_fill=float(self.cfg.no_face_fill),  # ← 新增
-            )
         return df
+
+    def save(self, df: pd.DataFrame, output_csv: str = "videoLineupResults.csv"):
+        """
+        Save the pipeline dataframe to CSV.
+        """
+        if df is None or df.empty:
+            raise ValueError("DataFrame is None or empty.")
+
+        dirpath = os.path.dirname(output_csv)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
+
+
+        df.to_csv(output_csv, index=False)
+        print(f"Saved pipeline results to {output_csv}")
+
+    def savepywitness(self,
+                      df: pd.DataFrame,
+                      output_csv: str = "videoLineupResults_pywitness.csv",
+                      targetLineup: Literal["targetPresent", "targetAbsent", "both"] = "both",
+                      lineupSize: Optional[int] = None):
+        """
+        Save a pyWitness-compatible CSV from the pipeline dataframe.
+        """
+        if df is None or df.empty:
+            raise ValueError("DataFrame is None or empty.")
+        if lineupSize is None:
+            lineupSize = len(self.lineup_loader.lineup)
+
+        dirpath = os.path.dirname(output_csv)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
+
+        check_target = (
+            self.identifier_obj.targetLineup
+            if (self.identifier_obj and self.identifier_obj.targetLineup in ("targetPresent", "targetAbsent"))
+            else (targetLineup or "both")
+        )
+
+        export_for_pywitness(
+            df=df,
+            output_csv=output_csv,
+            targetLineup=check_target,
+            lineupSize=lineupSize,
+            no_face_fill=float(self.cfg.no_face_fill)
+        )
+        print(f"Saved pipeline results to {output_csv}")
