@@ -169,8 +169,7 @@ class VideoLineupPipeline:
     def __init__(self,
                  video_path: str,
                  lineup_loader: LineupLoader,
-                 cfg: PipelineConfig | dict = PipelineConfig(),
-                 identifier: Optional[LineupIdentifier] = None):
+                 cfg: PipelineConfig | dict = PipelineConfig()):
         self.video_path = video_path
         self.lineup_loader = lineup_loader
 
@@ -181,16 +180,20 @@ class VideoLineupPipeline:
         else:
             raise TypeError("cfg must be a PipelineConfig or dict")
 
-        # Normalize identifier switch/object
-        if isinstance(identifier, LineupIdentifier):
-            self.identifier_obj: Optional[LineupIdentifier] = identifier
-            self.identifier_enabled: bool = True
-        elif identifier is True:
-            self.identifier_obj = LineupIdentifier()  # default threshold/targetLineup/target
-            self.identifier_enabled = True
-        else:
-            self.identifier_obj = None
-            self.identifier_enabled = False
+        # Identifier used to be a choice, now it is always enabled
+        self.identifier_obj = LineupIdentifier()
+        self.identifier_enabled = True
+        # identifier: Optional[LineupIdentifier] = None
+        # # Normalize identifier switch/object
+        # if isinstance(identifier, LineupIdentifier):
+        #     self.identifier_obj: Optional[LineupIdentifier] = identifier
+        #     self.identifier_enabled: bool = True
+        # elif identifier is True:
+        #     self.identifier_obj = LineupIdentifier()  # default threshold/targetLineup/target
+        #     self.identifier_enabled = True
+        # else:
+        #     self.identifier_obj = None
+        #     self.identifier_enabled = False
 
         # Initialize the lineup rows from LineupLoader
         self._row_il = ImageLoader([*self.lineup_loader.lineup])  # paths -> PIL
