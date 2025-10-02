@@ -332,17 +332,10 @@ class VideoLineupPipeline:
         pil = Image.fromarray(img_rgb)
 
         if self.cfg.use_full_frame:
-            if self._has_face(pil):
-                return [pil]
-            else:
-                return []
+            return [pil]
 
         method = getattr(self.cfg, "analyzer_method", "process")
         backend = getattr(self.cfg, "backend", "mtcnn")
-
-        # Pre-check if there is at least one face
-        if not self._has_face(pil):
-            return []
 
         faces: List[Image.Image] = []
 
@@ -363,13 +356,11 @@ class VideoLineupPipeline:
         else:
             # DeepFace path for process / process_verify / fallback
             try:
-                arr = np.array(pil)
                 dets = DeepFace.extract_faces(
-                    img_path=arr,
+                    img_path=np.array(pil),
                     detector_backend=backend,
                     enforce_detection=False
                 ) or []
-
                 for d in dets:
                     face_arr = d.get("face")
                     region = d.get("facial_area") or d.get("region")
@@ -541,12 +532,39 @@ class VideoLineupPipeline:
             if (logical_frame_idx - frame_start) % frame_stride != 0:
                 continue
 
-            faces = self._faces_from_frame(frame)  # List[PIL.Image]
+            if getattr(self.cfg, "use_full_frame", True):
+                img_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+                pil_full = Image.fromarray(img_rgb)
+                faces = [pil_full]
+            # Only detect faces if not using full frame
+            else:
+                faces = self._faces_from_frame(frame)
 
-            # print(f"[DEBUG] frame={logical_frame_idx}, detected_faces={len(faces)}, mode={self.cfg.pre_detect_faces}")
+            # Build column image for this frame
+            probe_names = [f"frame{logical_frame_idx}_face{i}" for i in range(len(faces))] if faces else []
+            col_il = ImageLoader([])
+            if faces:
+                col_il.images = {n: im for n, im in zip(probe_names, faces)}
+                col_il.path_to_images = {n: f"{n}.png" for n in probe_names}  # Virtual paths
+            else:
+                # No faces -> {} -> return empty sim_df -> no-face logic
+                col_il.images = {}
+                col_il.path_to_images = {}
 
-            if len(faces) == 0:
-                # Avoid None as index when it is passed to pivot_table
+            analyzer = self._analyzer_template
+            analyzer.column_images = col_il
+            analyzer.show_progress = self.cfg.show_progress
+
+            # maintain consistent methods: process / process_verify / process_georgia_pipeline
+            getattr(analyzer, self.cfg.analyzer_method)()
+            sim_df = analyzer.dataframe()
+            sim_df = sim_df.T  # Rows: probe, Cols: lineup member
+
+            # Check if there are any faces by seeing if sim_df is empty or all NaN
+            # If no faces detected at all, or all distances are NaN, treat as no-face frame
+            no_valid_dist = (sim_df.empty) or (sim_df.isna().all().all())
+
+            if no_valid_dist:
                 noface_probe = f"frame{logical_frame_idx}_noface"
                 for lm_path in self.lineup_loader.lineup:
                     lm_name = lm_path.split("/")[-1].split("\\")[-1].rsplit(".", 1)[0]
@@ -556,7 +574,7 @@ class VideoLineupPipeline:
                         "frame": logical_frame_idx,
                         "probe": noface_probe,
                         "lineup_member": lm_name,
-                        "distance": float(self.cfg.no_face_fill),  # Fill fixed value when no face detected
+                        "distance": float(self.cfg.no_face_fill),
                         "role": role,
                     }
 
@@ -572,30 +590,10 @@ class VideoLineupPipeline:
                         records.append(base_row)
                 continue
 
-            # Build column images for the frame
-            probe_names = [f"frame{logical_frame_idx}_face{i}" for i in range(len(faces))]
-            col_il = ImageLoader([])
-            col_il.images = {n: im for n, im in zip(probe_names, faces)}
-            col_il.path_to_images = {n: f"{n}.png" for n in probe_names}  # Virtual paths
-
-            analyzer = self._analyzer_template
-            analyzer.column_images = col_il
-
-            # Gain the updated progress bar
-            analyzer.show_progress = self.cfg.show_progress
-
-            getattr(analyzer, self.cfg.analyzer_method)()
-            sim_df = analyzer.dataframe()
-            sim_df = sim_df.T  # Rows: probe, Columns: lineup member (fits LineupIdentifier expectations)
-
-            # If Identifier is set, get summary for the frame
+            # Gneral case: at least one face with valid distances
             summary = {}
             if self.identifier_enabled:
                 summary = self._decide_summary(sim_df)
-
-            # Expand sim_df to long-form records
-            # Each row: (frame, probe, lineup_member, distance, role, **summary
-            # per_member_min = sim_df.min(axis=1)
 
             for probe, row in sim_df.iterrows():
                 for lm_name, dist in row.items():

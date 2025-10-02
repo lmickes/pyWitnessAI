@@ -189,22 +189,37 @@ class ImageAnalyzer:
         row_embeddings = {}
 
         for k, img in self._progress(list(self.column_images.images.items()), "Embeddings (columns)"):
-            column_embeddings[k] = self.get_embedding(img)
+            try:
+                column_embeddings[k] = self.get_embedding(img)
+            # Don't fail the whole process if one image fails, so that VideoLineupPipeline can continue
+            except Exception:
+                column_embeddings[k] = None
 
         for k, img in self._progress(list(self.row_images.images.items()), "Embeddings (rows)"):
-            row_embeddings[k] = self.get_embedding(img)
+            try:
+                row_embeddings[k] = self.get_embedding(img)
+            except Exception:
+                row_embeddings[k] = None
 
         similarity_data = []
-        for r_key, r_emb in self._progress(list(row_embeddings.items()), "Distances"):
+        col_keys = list(column_embeddings.keys())
+        row_keys = list(row_embeddings.keys())
+
+        for r_key in self._progress(row_keys, "Distances"):
+            r_emb = row_embeddings[r_key]
             row_scores = []
-            for c_key, c_emb in column_embeddings.items():
-                row_scores.append(self._distance(r_emb, c_emb))
+            for c_key in col_keys:
+                c_emb = column_embeddings[c_key]
+                if (r_emb is None) or (c_emb is None):
+                    row_scores.append(np.nan)
+                else:
+                    row_scores.append(self._distance(r_emb, c_emb))
             similarity_data.append(row_scores)
 
         self.similarity_matrix = pd.DataFrame(
             similarity_data,
-            index=row_embeddings.keys(),
-            columns=column_embeddings.keys()
+            index=row_keys,
+            columns=col_keys
         ).astype(float)
         self.method_used = "process"
 
