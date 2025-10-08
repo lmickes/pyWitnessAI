@@ -7,6 +7,7 @@ __pycache__/
 .eggs/
 .pytest_cache/
 .ipynb_checkpoints/
+src/pyWitnessAI/_version.py
 
 # Build / dist
 build/
@@ -28,6 +29,8 @@ venv/
 data/
 logs/
 outputs/
+test/output.txt
+tutorial/output.txt
 reports/
 figures/
 models/
