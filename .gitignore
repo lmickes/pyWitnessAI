@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 src/pyWitnessAI/_version.py
+src/pyWitnessAI/cache/
 
 # Build / dist
 build/
@@ -37,6 +38,8 @@ models/
 checkpoints/
 test/*.txt
 tutorial/*.txt
+*.pt
+*.pth
 
 # Media / large artifacts
 *.mp4
