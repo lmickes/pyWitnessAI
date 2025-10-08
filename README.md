@@ -57,7 +57,7 @@ Distances are computed between a probe face from each frame and each lineup memb
 
 ---
 
-## 3) Module Overview
+### 3) Module Overview
 
 #### 3.1 `ImageAnalyzer`
 
