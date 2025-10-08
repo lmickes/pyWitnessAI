@@ -35,6 +35,8 @@ reports/
 figures/
 models/
 checkpoints/
+test/*.txt
+tutorial/*.txt
 
 # Media / large artifacts
 *.mp4
