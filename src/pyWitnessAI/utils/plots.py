@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 _ROLES = ("filler", "guilty_suspect", "innocent_suspect")
 
-def _extract_role_distance_long_or_wide(df: pd.DataFrame) -> pd.DataFrame:
+def _extract_role_distance(df: pd.DataFrame) -> pd.DataFrame:
     """
     Get role-distance pairs from either long or wide DataFrame.
     Support three formats:
@@ -66,7 +66,7 @@ def plot_role_histograms(df: pd.DataFrame,
     - Else if long table with 'role' and 'distance' columns exist, use them directly.
     - Raise error if none of the above formats are found.
     """
-    data = _extract_role_distance_long_or_wide(df)
+    data = _extract_role_distance(df)
 
     # Only keep specified roles
     data = data[data["role"].isin(roles)]
@@ -78,20 +78,44 @@ def plot_role_histograms(df: pd.DataFrame,
     if isinstance(bins, int):
         bins = np.linspace(lo, hi, bins)
 
-    fig, ax = plt.subplots(figsize=figsize)
+    created = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        created = True
+
     for r in roles:
         vals = data.loc[data["role"] == r, "distance"].to_numpy()
         if len(vals) == 0:
             continue
-        ax.hist(vals, bins=bins, alpha=alpha, label=r.replace("_", " "),
-                edgecolor=edgecolor)
+        ax.hist(vals, bins=bins, alpha=alpha, edgecolor=edgecolor,
+                label=r.replace("_", " "))
 
     ax.set_xlim(lo, hi)
     ax.set_xlabel("Euclidean distance (lower = more similar)")
     ax.set_ylabel("count")
-    ax.set_title(title)
-    ax.grid(True, ls=":", alpha=0.4)
+    if title:
+        ax.set_title(title)
     if show_legend:
         ax.legend(frameon=False)
-    plt.tight_layout()
-    return fig, ax
+    ax.grid(True, ls=":", alpha=0.4)
+
+    return ax
+    #
+    #
+    # fig, ax = plt.subplots(figsize=figsize)
+    # for r in roles:
+    #     vals = data.loc[data["role"] == r, "distance"].to_numpy()
+    #     if len(vals) == 0:
+    #         continue
+    #     ax.hist(vals, bins=bins, alpha=alpha, label=r.replace("_", " "),
+    #             edgecolor=edgecolor)
+    #
+    # ax.set_xlim(lo, hi)
+    # ax.set_xlabel("Euclidean distance (lower = more similar)")
+    # ax.set_ylabel("count")
+    # ax.set_title(title)
+    # ax.grid(True, ls=":", alpha=0.4)
+    # if show_legend:
+    #     ax.legend(frameon=False)
+    # plt.tight_layout()
+    # return fig, ax
