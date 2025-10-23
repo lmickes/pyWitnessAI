@@ -58,6 +58,7 @@ def plot_role_histograms(df: pd.DataFrame,
                          figsize=(7,4),
                          title="Role-wise similarity histograms",
                          show_legend=True,
+                         colors=None,
                          ax=None):
     """
     Plot histograms of distances by fillers / guilty_suspect / innocent_suspect (just counts with no standardization).
@@ -78,17 +79,32 @@ def plot_role_histograms(df: pd.DataFrame,
     if isinstance(bins, int):
         bins = np.linspace(lo, hi, bins)
 
-    created = False
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
         created = True
 
-    for r in roles:
+    def _color_for_role(role: str, idx: int):
+        if colors is None:
+            return None
+        if isinstance(colors, dict):
+            return colors.get(role, None)
+        if isinstance(colors, (list, tuple)):
+            if 0 <= idx < len(colors):
+                return colors[idx]
+            return None
+        if isinstance(colors, str):
+            return colors
+        return None
+
+    for i, r in enumerate(roles):
         vals = data.loc[data["role"] == r, "distance"].to_numpy()
         if len(vals) == 0:
             continue
-        ax.hist(vals, bins=bins, alpha=alpha, edgecolor=edgecolor,
-                label=r.replace("_", " "))
+        c = _color_for_role(r, i)
+        hist_kwargs = dict(bins=bins, edgecolor=c, alpha=alpha)
+        if c is not None:
+            hist_kwargs["color"] = c
+        ax.hist(vals, **hist_kwargs)
 
     ax.set_xlim(lo, hi)
     ax.set_xlabel("Euclidean distance (lower = more similar)")
@@ -100,22 +116,3 @@ def plot_role_histograms(df: pd.DataFrame,
     ax.grid(True, ls=":", alpha=0.4)
 
     return ax
-    #
-    #
-    # fig, ax = plt.subplots(figsize=figsize)
-    # for r in roles:
-    #     vals = data.loc[data["role"] == r, "distance"].to_numpy()
-    #     if len(vals) == 0:
-    #         continue
-    #     ax.hist(vals, bins=bins, alpha=alpha, label=r.replace("_", " "),
-    #             edgecolor=edgecolor)
-    #
-    # ax.set_xlim(lo, hi)
-    # ax.set_xlabel("Euclidean distance (lower = more similar)")
-    # ax.set_ylabel("count")
-    # ax.set_title(title)
-    # ax.grid(True, ls=":", alpha=0.4)
-    # if show_legend:
-    #     ax.legend(frameon=False)
-    # plt.tight_layout()
-    # return fig, ax
