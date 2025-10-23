@@ -59,7 +59,10 @@ def plot_role_histograms(df: pd.DataFrame,
                          title="Role-wise similarity histograms",
                          show_legend=True,
                          colors=None,
-                         ax=None):
+                         ax=None,
+                         show_grid=True,
+                         grid_kw=None,
+                         frameon=True) -> plt.Axes:
     """
     Plot histograms of distances by fillers / guilty_suspect / innocent_suspect (just counts with no standardization).
     - Use min_by_role[role] columns if present (output of run()).
@@ -81,7 +84,6 @@ def plot_role_histograms(df: pd.DataFrame,
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
-        created = True
 
     def _color_for_role(role: str, idx: int):
         if colors is None:
@@ -96,23 +98,37 @@ def plot_role_histograms(df: pd.DataFrame,
             return colors
         return None
 
+    plotted_any = False
     for i, r in enumerate(roles):
         vals = data.loc[data["role"] == r, "distance"].to_numpy()
         if len(vals) == 0:
             continue
         c = _color_for_role(r, i)
-        hist_kwargs = dict(bins=bins, edgecolor=c, alpha=alpha)
+        hist_kwargs = dict(
+            bins=bins,
+            alpha=alpha,
+            edgecolor=edgecolor,
+            label=r.replace("_", " ")
+        )
         if c is not None:
             hist_kwargs["color"] = c
         ax.hist(vals, **hist_kwargs)
+        plotted_any = True
 
     ax.set_xlim(lo, hi)
     ax.set_xlabel("Euclidean distance (lower = more similar)")
     ax.set_ylabel("count")
     if title:
         ax.set_title(title)
-    if show_legend:
-        ax.legend(frameon=False)
+    if show_legend and plotted_any:
+        ax.legend(frameon=frameon)
     ax.grid(True, ls=":", alpha=0.4)
+    if show_grid:
+        kw = {"ls": ":", "alpha": 0.4}
+        if isinstance(grid_kw, dict):
+            kw.update(grid_kw)
+        ax.grid(True, **kw)
+    else:
+        ax.grid(False)
 
     return ax
