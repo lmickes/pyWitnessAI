@@ -1,4 +1,4 @@
-def test_image_loading_singlefile():
+def test_ImageLoader_singlefile():
     import pyWitnessAI
 
     il = pyWitnessAI.ImageLoader("./data/01_Georgia_State_Video1/Video1_Mugshot2.png")
@@ -6,7 +6,7 @@ def test_image_loading_singlefile():
     assert len(il.images) == 1
 
 
-def test_image_loading_directory():
+def test_ImageLoader_directory():
     import pyWitnessAI
 
     il = pyWitnessAI.ImageLoader("./data/01_Georgia_State_Video1/")
@@ -14,14 +14,14 @@ def test_image_loading_directory():
     assert len(il.images) == 8
 
 
-def test_image_loading_wildcard():
+def test_ImageLoader_wildcard():
     import pyWitnessAI
 
     il = pyWitnessAI.ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
     assert len(il.images) == 6
 
-def test_image_loading_list():
+def test_ImageLoader_list():
     import pyWitnessAI
 
     il = pyWitnessAI.ImageLoader(["./data/01_Georgia_State_Video1/*Mugshot*",
