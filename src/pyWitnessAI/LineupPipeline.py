@@ -663,3 +663,16 @@ class VideoLineupPipeline:
             no_face_fill=float(self.cfg.no_face_fill)
         )
         print(f"Saved pipeline results to {output_csv}")
+
+    def plot_role_histograms(self, df: pd.DataFrame,
+                             roles=("filler", "guilty_suspect", "innocent_suspect"),
+                             bins=40, xlim=None, alpha=0.55,
+                             figsize=(7, 4), title=None):
+        """
+        Draw histograms of distances by role.
+        """
+        from .utils.plots import plot_role_histograms as _plot
+        if title is None:
+            title = "Similarity histograms by role (min distance per role)"
+        return _plot(df, roles=roles, bins=bins, xlim=xlim, alpha=alpha,
+                     figsize=figsize, title=title, show_legend=True)
