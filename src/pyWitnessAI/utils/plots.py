@@ -70,6 +70,8 @@ def plot_role_histograms(df: pd.DataFrame,
     - Else if long table with 'role' and 'distance' columns exist, use them directly.
     - Raise error if none of the above formats are found.
     """
+    if colors is None:
+        colors = {"filler": '#2ca02c', "guilty_suspect": '#1f77b4', "innocent_suspect": '#ff7f0e'}
     data = _extract_role_distance(df)
 
     # Only keep specified roles
