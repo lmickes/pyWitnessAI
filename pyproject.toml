@@ -1,38 +1,122 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "setuptools_scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pyWitnessAI"
-description = "Deepface based facial recognition"
-version = "0.0.1"
+description = "DeepFace-based facial recognition utilities"
+# Use setuptools_scm to derive the version from Git tags; see [tool.setuptools_scm] below.
+dynamic = ["version"]
+requires-python = ">=3.10,<3.11"
 authors = [
-    { name = "Stewart Boogert", email = "sboogert@mac.com" },
-    { name = "Damien Wang", email = "damien.wang@bristol.ac.uk" }
+  { name = "Stewart Boogert", email = "sboogert@mac.com" },
+  { name = "Damien Wang", email = "damien.wang@bristol.ac.uk" }
 ]
+
+# Core minimal dependencies. Keep this light; heavy/fragile deps are moved to extras.
 dependencies = [
-    "deepface",
-    "numpy",
-    "matplotlib",
-    "ipython",
-    "cv"
+  "numpy==1.26.4",
+  "pandas==2.2.2",
+  "pillow==10.3.0"
 ]
 
 [project.optional-dependencies]
-dev = []
+# One-shot CPU bundle: DeepFace + YOLOv11 + InsightFace (Buffalo_L) + notebook-safe pins.
+full-cpu = [
+  "deepface==0.0.95",
+  "tensorflow==2.12.1",
+  "keras==2.12.0",
+  "typing-extensions==4.5.0",
 
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+  # Keep only one OpenCV wheel (contrib build includes extra modules like YUNet).
+  "opencv-contrib-python==4.11.0.86",
+  "mtcnn==0.1.1",
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-include-package-data = true
+  # YOLOv11 and MediaPipe detectors.
+  "ultralytics>=8.3,<9",
+  "mediapipe>=0.10,<0.11",
 
-[tool.setuptools.packages.find]
-where = ["src"]  # list of folders that contain the packages (["."] by default)
-include = ["pyWitnessAI"]  # package names should match these glob patterns (["*"] by default)
-# include = ["DataFlattener"]
+  # Torch / ONNX / InsightFace (includes Buffalo_L).
+  "torch==1.13.1",
+  "torchvision==0.14.1",
+  "onnxruntime==1.17.3",
+  "insightface==0.7.3",
+  "retina-face>=0.0.14,<0.1",
+  "facenet-pytorch==2.5.3",
+
+  # dlib: prebuilt wheel on Windows, source wheel elsewhere.
+  "dlib-bin==19.24.2; platform_system == 'Windows'",
+  "dlib==19.24.2; platform_system != 'Windows'",
+
+  # Notebook stack pinned to work with typing-extensions==4.5.0.
+  "ipython==8.12.2",
+  "ipykernel==6.25.2",
+  "jupyter-client==8.6.1"
+]
+
+# Optional granular bundles for selective installs.
+tf = [
+  "tensorflow==2.12.1",
+  "keras==2.12.0",
+  "typing-extensions==4.5.0",
+  "mtcnn==0.1.1"
+]
+
+yolo = [
+  "ultralytics>=8.3,<9"
+]
+
+mediapipe = [
+  "mediapipe>=0.10,<0.11"
+]
+
+insight = [
+  "onnxruntime==1.17.3",
+  "insightface==0.7.3",
+  "retina-face>=0.0.14,<0.1"
+]
+
+torchkit = [
+  "torch==1.13.1",
+  "torchvision==0.14.1",
+  "facenet-pytorch==2.5.3"
+]
+
+notebook-pinned = [
+  "ipython==8.12.2",
+  "ipykernel==6.25.2",
+  "jupyter-client==8.6.1"
+]
+
+opencv-contrib = [
+  "opencv-contrib-python==4.11.0.86"
+]
 
 [project.scripts]
 pyWitnessAI = "pyWitnessAI:main"
+# You can add maintenance CLIs later, e.g.:
+# pywitnessai-fix-opencv = "pyWitnessAI.cli:fix_opencv"
 
+[project.urls]
+Homepage = "https://github.com/your-org/pyWitnessAI"
+Issues = "https://github.com/your-org/pyWitnessAI/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pyWitnessAI*"]
+
+# Package data declared with paths relative to the package root (not "src/...").
 [tool.setuptools.package-data]
-"pyWitnessAI.FaceNet_Model" = ["src/pyWitnessAI/FaceNet_Model/FACE-DETECT.h5"]
-"pyWitnessAI.OpenCV_Models" = ["src/pyWitnessAI/OpenCV_Models/*.xml"]
+pyWitnessAI = [
+  "FaceNet_Model/FACE-DETECT.h5",
+  "OpenCV_Models/*.xml"
+]
+
+# setuptools_scm: derive version from Git; fallback if no tags are available.
+[tool.setuptools_scm]
+fallback_version = "0.0.1"
+write_to = "src/pyWitnessAI/_version.py"

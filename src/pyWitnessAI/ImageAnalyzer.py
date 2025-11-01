@@ -1,29 +1,46 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings
+
+import io
+from contextlib import redirect_stdout, redirect_stderr
 import numpy as np
 import pandas as pd
 from deepface import DeepFace
-from tqdm import tqdm
 from facenet_pytorch import MTCNN, InceptionResnetV1
 import torch
 from PIL import Image
+import glob
+from typing import Dict, Iterable, Tuple
+
 
 class ImageLoader:
     def __init__(self, images):
         """
-        Initialize the ImageLoader with a list of image paths, a directory path, or a glob pattern.
-        Stores loaded images and their paths in dictionaries.
+        Initialize with:
+          - list of paths or glob patterns
+          - a directory path
+          - a single glob pattern string
+        Stores PIL.Image (RGB) objects.
         """
-        self.images = {}
-        self.path_to_images = {}
+        self.images: Dict[str, Image.Image] = {}
+        self.path_to_images: Dict[str, str] = {}
 
         if isinstance(images, list):
-            image_paths = images
+            image_paths = []
+            for item in images:
+                if '*' in item or '?' in item or '[' in item:
+                    image_paths.extend(glob.glob(item))
+                else:
+                    image_paths.append(item)
         elif isinstance(images, str) and os.path.isdir(images):
             image_paths = self.find_images_in_directory(images)
         elif isinstance(images, str):
             image_paths = self.find_images_glob(images)
         else:
             raise ValueError("Unsupported images input. Provide a list, directory path, or glob pattern.")
+
+        # De-dup & sort for determinism
+        image_paths = sorted(set(image_paths))
 
         for image_path in image_paths:
             # image = cv.imread(image_path)
@@ -41,247 +58,248 @@ class ImageLoader:
         return [os.path.join(directory, f) for f in os.listdir(directory) if f.lower().endswith(image_extensions)]
 
     def find_images_glob(self, pattern):
-        import glob
         return glob.glob(pattern)
 
-    def dataframe(self):
-        image_size_x = [image.shape[0] for image in self.images.values()]
-        image_size_y = [image.shape[1] for image in self.images.values()]
-
+    def dataframe(self) -> pd.DataFrame:
+        # PIL uses width, height
+        sizes: Iterable[Tuple[int, int]] = (img.size for img in self.images.values())
+        widths, heights = zip(*sizes) if self.images else ([], [])
         data = {
             'image_base': list(self.images.keys()),
-            'image_path': list(self.path_to_images.values()),
-            'image_size_x': image_size_x,
-            'image_size_y': image_size_y
+            'image_path': [self.path_to_images[k] for k in self.images.keys()],
+            'width': widths,
+            'height': heights,
         }
         return pd.DataFrame(data)
 
 class ImageAnalyzer:
-    def __init__(self, column_images, row_images, distance_metric="euclidean",
-                 backend="opencv", enforce_detection=False, model="VGG-Face",
-                 align=False, normalization="base"):
-        """
-        Initialize the ImageAnalyzer with ImageLoader instances for columns and rows.
-        """
+    def __init__(
+        self,
+        column_images: ImageLoader,
+        row_images: ImageLoader,
+        distance_metric: str = "euclidean",
+        backend: str = "opencv",
+        enforce_detection: bool = False,
+        model: str = "VGG-Face",
+        align: bool = False,
+        normalization: str = "base",
+        show_progress: bool = False,
+        device: str = None,
+    ):
         self.column_images = column_images
         self.row_images = row_images
         self.distance_metric = distance_metric
         self.backend = backend
-        self.enforceDetection = enforce_detection
+        self.enforce_detection = enforce_detection
         self.model = model
         self.align = align
         self.normalization = normalization
-        self.similarity_matrix = None  # To store the final similarity matrix
-        self.method_used = None  # To track which method was used (analyze or process)
+        self.show_progress = show_progress
 
-        # Initialize MTCNN and InceptionResnetV1 for embedding extraction
-        self.mtcnn = MTCNN()
-        self.resnet = InceptionResnetV1(pretrained='vggface2').eval()
+        # results
+        self.similarity_matrix: pd.DataFrame | None = None
+        self.method_used: str | None = None
 
-    def get_embedding(self, image):
-        """
-        Obtain the facial embedding for a given image using DeepFace.
-        """
-        # Convert PIL.Image.Image to NumPy array
-        image_array = np.array(image)
+        # Torch device
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        embedding = DeepFace.represent(
-            image_array,
-            model_name=self.model,
-            enforce_detection=self.enforceDetection,
-            detector_backend=self.backend,
-            align=self.align,
-            normalization=self.normalization
-        )
-        return np.array(embedding[0]['embedding'])
+        # FaceNet stack
+        self.mtcnn = MTCNN(device=self.device)
+        self.resnet = InceptionResnetV1(pretrained='vggface2').eval().to(self.device)
 
-    def get_embedding_facenet(self, img):
-        """
-        Extract facial embedding using MTCNN and InceptionResnetV1.
-        """
-        face = self.mtcnn(img)
-        if face is None:
-            return None
-        emb = self.resnet(face.unsqueeze(0))   # Extract embedding
-        return emb
+    # ---------- utils ----------
+    def _progress(self, iterable, desc: str):
+        # Lazy import to keep dependency light if user never wants bars
+        from tqdm import tqdm
+        return tqdm(iterable, desc=desc, disable=not self.show_progress)
 
-    def calculate_similarity_euclidean(self, embedding1, embedding2):
+    # ---------- embeddings ----------
+    def get_embedding(self, image: Image.Image) -> np.ndarray:
         """
-        Calculate L2-normalized Euclidean distance between two embeddings.
+        DeepFace.represent wrapper. Returns 1D numpy embedding.
         """
-        if isinstance(embedding1, torch.Tensor):
-            return np.sqrt(((embedding1 - embedding2) * (embedding1 - embedding2)).sum().item())
-        else:
-            return np.linalg.norm(embedding1 - embedding2)
+        image_array = np.array(image)  # HWC RGB
 
-    def calculate_similarity_euclidean_l2(self, embedding1, embedding2):
-        """
-        Calculate L2-normalized Euclidean distance between two embeddings.
-        """
-        if isinstance(embedding1, torch.Tensor):
-            embedding1 = embedding1.detach().numpy()
-        if isinstance(embedding2, torch.Tensor):
-            embedding2 = embedding2.detach().numpy()
+        with io.StringIO() as buf, redirect_stdout(buf), redirect_stderr(buf):
+            reps = DeepFace.represent(
+                image_array,
+                model_name=self.model,
+                enforce_detection=self.enforce_detection,
+                detector_backend=self.backend,
+                align=self.align,
+                normalization=self.normalization
+            )
 
-        embedding1 = embedding1 / np.linalg.norm(embedding1)
-        embedding2 = embedding2 / np.linalg.norm(embedding2)
+        if not reps:
+            raise ValueError("DeepFace.represent returned no embeddings.")
+        return np.asarray(reps[0]['embedding'], dtype=np.float32)
 
-        return np.linalg.norm(embedding1 - embedding2)
+    def get_embedding_facenet(self, img: Image.Image) -> torch.Tensor | None:
+        """
+        MTCNN detect+align -> InceptionResnetV1 embedding.
+        Returns 1xD torch tensor on CPU for consistent downstream math.
+        """
+        with torch.no_grad():
+            face = self.mtcnn(img)
+            if face is None:
+                return None
+            emb = self.resnet(face.unsqueeze(0).to(self.device)).cpu()
+        return emb.squeeze(0)  # shape [D]
 
-    def calculate_similarity_cosine(self, embedding1, embedding2):
-        """
-        Calculate cosine distance (1 - cosine similarity) between two embeddings.
-        """
-        if isinstance(embedding1, torch.Tensor):
-            embedding1 = embedding1.detach().numpy()
-        if isinstance(embedding2, torch.Tensor):
-            embedding2 = embedding2.detach().numpy()
-        embedding1 = embedding1 / np.linalg.norm(embedding1)
-        embedding2 = embedding2 / np.linalg.norm(embedding2)
-        return 1 - np.dot(embedding1, embedding2)
+    # ---------- distances ----------
+    def _to_numpy(self, x):
+        if isinstance(x, torch.Tensor):
+            x = x.detach().cpu().numpy()
+        return x
 
-    def process_embedding(self):
+    def calculate_similarity_euclidean(self, embedding1, embedding2) -> float:
+        a = self._to_numpy(embedding1).astype(np.float32)
+        b = self._to_numpy(embedding2).astype(np.float32)
+        return float(np.linalg.norm(a - b))
+
+    def calculate_similarity_euclidean_l2(self, embedding1, embedding2) -> float:
+        a = self._to_numpy(embedding1).astype(np.float32)
+        b = self._to_numpy(embedding2).astype(np.float32)
+        a /= (np.linalg.norm(a) + 1e-12)
+        b /= (np.linalg.norm(b) + 1e-12)
+        return float(np.linalg.norm(a - b))
+
+    def calculate_similarity_cosine(self, embedding1, embedding2) -> float:
+        a = self._to_numpy(embedding1).astype(np.float32)
+        b = self._to_numpy(embedding2).astype(np.float32)
+        a /= (np.linalg.norm(a) + 1e-12)
+        b /= (np.linalg.norm(b) + 1e-12)
+        return float(1.0 - np.dot(a, b))
+
+    def _distance(self, e1, e2) -> float:
+        if self.distance_metric == "euclidean":
+            return self.calculate_similarity_euclidean(e1, e2)
+        if self.distance_metric == "euclidean_l2":
+            return self.calculate_similarity_euclidean_l2(e1, e2)
+        if self.distance_metric == "cosine":
+            return self.calculate_similarity_cosine(e1, e2)
+        raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
+
+    # ---------- pipelines ----------
+    def process(self):
         """
-        Generate similarity matrix using DeepFace.represent (embedding-based method).
+        Embedding-based similarities using DeepFace.represent.
         """
         column_embeddings = {}
         row_embeddings = {}
 
-        from contextlib import redirect_stdout, redirect_stderr
+        for k, img in self._progress(list(self.column_images.images.items()), "Embeddings (columns)"):
+            try:
+                column_embeddings[k] = self.get_embedding(img)
+            # Don't fail the whole process if one image fails, so that VideoLineupPipeline can continue
+            except Exception:
+                column_embeddings[k] = None
 
-        f = open('output.txt', 'w')
-        redirect_stdout(f)
-        redirect_stderr(f)
+        for k, img in self._progress(list(self.row_images.images.items()), "Embeddings (rows)"):
+            try:
+                row_embeddings[k] = self.get_embedding(img)
+            except Exception:
+                row_embeddings[k] = None
 
-        print("Extracting embeddings for column images...")
-        for image_base, image in tqdm(self.column_images.images.items()):
-        # for image_base, image in self.column_images.images.items():
-            column_embeddings[image_base] = self.get_embedding(image)
-
-        print("Extracting embeddings for row images...")
-        for image_base, image in tqdm(self.row_images.images.items()):
-            row_embeddings[image_base] = self.get_embedding(image)
-
-        print("Calculating similarities...")
         similarity_data = []
+        col_keys = list(column_embeddings.keys())
+        row_keys = list(row_embeddings.keys())
 
-        for row_base, row_embedding in tqdm(row_embeddings.items()):
+        for r_key in self._progress(row_keys, "Distances"):
+            r_emb = row_embeddings[r_key]
             row_scores = []
-            for column_base, column_embedding in column_embeddings.items():
-                if self.distance_metric == "euclidean":
-                    similarity_score = self.calculate_similarity_euclidean(row_embedding, column_embedding)
-                elif self.distance_metric == "cosine":
-                    similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
-                elif self.distance_metric == "euclidean_l2":
-                    similarity_score = self.calculate_similarity_euclidean_l2(row_embedding, column_embedding)
+            for c_key in col_keys:
+                c_emb = column_embeddings[c_key]
+                if (r_emb is None) or (c_emb is None):
+                    row_scores.append(np.nan)
                 else:
-                    raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
-                row_scores.append(similarity_score)
+                    row_scores.append(self._distance(r_emb, c_emb))
             similarity_data.append(row_scores)
 
         self.similarity_matrix = pd.DataFrame(
             similarity_data,
-            index=row_embeddings.keys(),
-            columns=column_embeddings.keys()
-        )
-        self.method_used = "process_embedding"
+            index=row_keys,
+            columns=col_keys
+        ).astype(float)
+        self.method_used = "process"
 
     def process_verify(self):
         """
-        Generate similarity matrix using DeepFace.verify (verification-based method).
+        Similarities via DeepFace.verify (distance output).
         """
-        print("Calculating similarities using DeepFace.verify...")
-        similarity_data = []
-        for row_base, row_image in tqdm(self.row_images.images.items()):
-            row_scores = []
-            for column_base, column_image in self.column_images.images.items():
-                try:
-                    row_image = np.array(row_image)  # Ensure the image is in NumPy format
-                    column_image = np.array(column_image)  # Ensure the image is in NumPy format
+        rows = list(self.row_images.images.items())
+        cols = list(self.column_images.images.items())
 
-                    result = DeepFace.verify(
-                        row_image,
-                        column_image,
-                        model_name=self.model,
-                        detector_backend=self.backend,
-                        enforce_detection=self.enforceDetection,
-                        distance_metric=self.distance_metric,
-                        align=self.align,
-                        normalization=self.normalization
-                    )
-                    similarity_score = result['distance']  # Use the distance metric from DeepFace.verify
-                except ValueError:
-                    similarity_score = None  # Handle cases where verification fails
-                row_scores.append(similarity_score)
+        similarity_data = []
+        for r_key, r_img in self._progress(rows, "Verify (rows)"):
+            r_img_np = np.array(r_img)
+            row_scores = []
+            for c_key, c_img in cols:
+                try:
+                    c_img_np = np.array(c_img)
+                    with io.StringIO() as buf, redirect_stdout(buf), redirect_stderr(buf):
+                        result = DeepFace.verify(
+                            r_img_np,
+                            c_img_np,
+                            model_name=self.model,
+                            detector_backend=self.backend,
+                            enforce_detection=self.enforce_detection,
+                            distance_metric=self.distance_metric,
+                            align=self.align,
+                            normalization=self.normalization
+                        )
+                    row_scores.append(float(result['distance']))
+                except Exception:
+                    row_scores.append(np.nan)
             similarity_data.append(row_scores)
 
         self.similarity_matrix = pd.DataFrame(
             similarity_data,
-            index=self.row_images.images.keys(),
-            columns=self.column_images.images.keys()
-        )
+            index=[k for k, _ in rows],
+            columns=[k for k, _ in cols]
+        ).astype(float)
         self.method_used = "process_verify"
 
-    def process_with_facenet(self):
+    def process_georgia_pipeline(self):
         """
-        Generate similarity matrix using MTCNN and InceptionResnetV1 for embedding extraction.
+        MTCNN + InceptionResnetV1 (Facenet) embeddings (as described in Kleider-Offutt et al. 2024).
         """
         column_embeddings = {}
         row_embeddings = {}
 
-        print("Extracting embeddings for column images using Facenet...")
-        for image_base, image in tqdm(self.column_images.images.items()):
-            column_embeddings[image_base] = self.get_embedding_facenet(image)
+        for k, img in self._progress(list(self.column_images.images.items()), "FaceNet (columns)"):
+            column_embeddings[k] = self.get_embedding_facenet(img)
 
-        print("Extracting embeddings for row images using Facenet...")
-        for image_base, image in tqdm(self.row_images.images.items()):
-            row_embeddings[image_base] = self.get_embedding_facenet(image)
+        for k, img in self._progress(list(self.row_images.images.items()), "FaceNet (rows)"):
+            row_embeddings[k] = self.get_embedding_facenet(img)
 
-        print("Calculating similarities using Facenet embeddings...")
         similarity_data = []
-
-        for row_base, row_embedding in tqdm(row_embeddings.items()):
+        for r_key, r_emb in self._progress(list(row_embeddings.items()), "Distances"):
             row_scores = []
-            for column_base, column_embedding in column_embeddings.items():
-                if self.distance_metric == "euclidean":
-                    similarity_score = self.calculate_similarity_euclidean(row_embedding, column_embedding)
-                elif self.distance_metric == "cosine":
-                    similarity_score = self.calculate_similarity_cosine(row_embedding, column_embedding)
+            for c_key, c_emb in column_embeddings.items():
+                if r_emb is None or c_emb is None:
+                    row_scores.append(np.nan)
                 else:
-                    raise ValueError(f"Unsupported distance metric: {self.distance_metric}")
-                row_scores.append(similarity_score)
+                    row_scores.append(self.calculate_similarity_euclidean(r_emb, c_emb))
             similarity_data.append(row_scores)
 
         self.similarity_matrix = pd.DataFrame(
             similarity_data,
             index=row_embeddings.keys(),
             columns=column_embeddings.keys()
-        )
-        self.method_used = "process_facenet"
+        ).astype(float)
+        self.method_used = "process_georgia_pipeline"
 
-    def dataframe(self):
-        """
-        Return the similarity matrix.
-        """
+    # ---------- io ----------
+    def dataframe(self) -> pd.DataFrame:
+        if self.similarity_matrix is None:
+            raise ValueError("No similarity matrix. Run one of the process*() methods first.")
         return self.similarity_matrix.round(4)
 
     def save(self, directory='results', label='similarity_matrix'):
-        """
-        Save the similarity matrix to a CSV file. Creates the directory if it does not exist.
-        :param directory: Directory where the file will be saved.
-        :param label: Label to include in the filename.
-        """
         if self.similarity_matrix is None:
-            raise ValueError("No similarity matrix to save. Please run analyze() or process()/dataframe() first.")
-
-        # Ensure the directory exists
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-        # Construct the filename
-        filename = f"{label}.csv"
-        filepath = os.path.join(directory, filename)
-
-        # Save the similarity matrix to a CSV file
-        self.similarity_matrix.to_csv(filepath, index=True)
-        print(f"Similarity matrix saved to {filepath}.")
+            raise ValueError("No similarity matrix to save. Run process*() first.")
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"{label}.csv")
+        self.similarity_matrix.to_csv(path, index=True)
+        print(f"Similarity matrix saved to {path}.")
