@@ -2,9 +2,9 @@ import cv2 as cv
 from typing import List, Optional, Literal
 from dataclasses import dataclass
 
-from .ImageAnalyzer import *
-from .LineupLoader import LineupLoader
-from .LineupIdentifier import LineupIdentifier
+from .ImagesAI import *
+from .Lineup import Lineup
+from .LineupAIDecision import LineupAIDecision
 
 
 @dataclass
@@ -168,7 +168,7 @@ class VideoLineupPipeline:
 
     def __init__(self,
                  video_path: str,
-                 lineup_loader: LineupLoader,
+                 lineup_loader: Lineup,
                  cfg: PipelineConfig | dict = PipelineConfig()):
         self.video_path = video_path
         self.lineup_loader = lineup_loader
@@ -181,7 +181,7 @@ class VideoLineupPipeline:
             raise TypeError("cfg must be a PipelineConfig or dict")
 
         # Identifier used to be a choice, now it is always enabled
-        self.identifier_obj = LineupIdentifier()
+        self.identifier_obj = LineupAIDecision()
         self.identifier_enabled = True
         # identifier: Optional[LineupIdentifier] = None
         # # Normalize identifier switch/object
@@ -196,12 +196,12 @@ class VideoLineupPipeline:
         #     self.identifier_enabled = False
 
         # Initialize the lineup rows from LineupLoader
-        self._row_il = ImageLoader([*self.lineup_loader.lineup])  # paths -> PIL
+        self._row_il = Images([*self.lineup_loader.lineup])  # paths -> PIL
         # Roles map: image base name -> role
-        self.roles = LineupIdentifier._role_map_from_lineuploader(self.lineup_loader)
+        self.roles = LineupAIDecision._role_map_from_lineuploader(self.lineup_loader)
 
-        self._analyzer_template = ImageAnalyzer(
-            column_images=ImageLoader([]),
+        self._analyzer_template = ImagesAI(
+            column_images=Images([]),
             row_images=self._row_il,
             distance_metric=self.cfg.distance_metric,
             backend=self.cfg.backend,
@@ -542,7 +542,7 @@ class VideoLineupPipeline:
 
             # Build column image for this frame
             probe_names = [f"frame{logical_frame_idx}_face{i}" for i in range(len(faces))] if faces else []
-            col_il = ImageLoader([])
+            col_il = Images([])
             if faces:
                 col_il.images = {n: im for n, im in zip(probe_names, faces)}
                 col_il.path_to_images = {n: f"{n}.png" for n in probe_names}  # Virtual paths
