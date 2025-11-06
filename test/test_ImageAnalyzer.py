@@ -1,7 +1,7 @@
 from pyWitnessAI import ImageLoader, ImageAnalyzer
 
 # ---------- Georgia State ----------
-def test_similarity_georgia_pipeline():
+def test_ImageAnalyzer_georgia_pipeline():
     """
     Test to reproduce the similarity scores from Kleider-Offutt et al. (2024)
     using the dedicated process_georgia_pipeline method.
@@ -32,7 +32,7 @@ def test_similarity_georgia_pipeline():
 
 
 # ---------- different distance metrics ----------
-def test_similarity_mtcnn_facenet_euclidean_l2():
+def test_ImageAnalyzer_mtcnn_facenet_euclidean_l2():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -58,7 +58,7 @@ def test_similarity_mtcnn_facenet_euclidean_l2():
     assert df["Video1_Perpetrator"][5] == 1.2442
 
 
-def test_similarity_mtcnn_facenet_cosine():
+def test_ImageAnalyzer_mtcnn_facenet_cosine():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -82,7 +82,7 @@ def test_similarity_mtcnn_facenet_cosine():
     assert df["Video1_Perpetrator"][5] == 0.7740
 
 
-def test_similarity_mtcnn_facenet_euclidean():
+def test_ImageAnalyzer_mtcnn_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -107,7 +107,7 @@ def test_similarity_mtcnn_facenet_euclidean():
 
 
 # ---------- different detection backends ----------
-def test_similarity_opencv_facenet_euclidean():
+def test_ImageAnalyzer_opencv_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -131,7 +131,7 @@ def test_similarity_opencv_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 14.2616
 
 
-def test_similarity_fastmtcnn_facenet_euclidean():
+def test_ImageAnalyzer_fastmtcnn_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -155,7 +155,7 @@ def test_similarity_fastmtcnn_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 14.8043
 
 
-def test_similarity_ssd_facenet_euclidean():
+def test_ImageAnalyzer_ssd_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -179,7 +179,7 @@ def test_similarity_ssd_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 14.8717
 
 
-def test_similarity_dlib_facenet_euclidean():
+def test_ImageAnalyzer_dlib_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -203,7 +203,7 @@ def test_similarity_dlib_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 15.0814
 
 
-def test_similarity_retinaface_facenet_euclidean():
+def test_ImageAnalyzer_retinaface_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -227,7 +227,7 @@ def test_similarity_retinaface_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 14.7612
 
 
-def test_similarity_yunet_facenet_euclidean():
+def test_ImageAnalyzer_yunet_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -251,7 +251,7 @@ def test_similarity_yunet_facenet_euclidean():
     assert df["Video1_Perpetrator"][5] == 15.3376
 
 
-def test_similarity_centerface_facenet_euclidean():
+def test_ImageAnalyzer_centerface_facenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -276,7 +276,7 @@ def test_similarity_centerface_facenet_euclidean():
 
 
 # ---------- different models ----------
-def test_similarity_mtcnn_vggface_euclidean():
+def test_ImageAnalyzer_mtcnn_vggface_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -299,7 +299,7 @@ def test_similarity_mtcnn_vggface_euclidean():
     assert df["Video1_Perpetrator"][5] == 1.2934
 
 
-def test_similarity_mtcnn_facenet512_euclidean():
+def test_ImageAnalyzer_mtcnn_facenet512_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -322,7 +322,7 @@ def test_similarity_mtcnn_facenet512_euclidean():
     assert df["Video1_Perpetrator"][5] == 28.4808
 
 
-def test_similarity_mtcnn_openface_euclidean():
+def test_ImageAnalyzer_mtcnn_openface_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -345,7 +345,7 @@ def test_similarity_mtcnn_openface_euclidean():
     assert df["Video1_Perpetrator"][5] == 0.8997
 
 
-def test_similarity_mtcnn_deepid_euclidean():
+def test_ImageAnalyzer_mtcnn_deepid_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -368,7 +368,7 @@ def test_similarity_mtcnn_deepid_euclidean():
     assert df["Video1_Perpetrator"][5] == 55.7571
 
 
-def test_similarity_mtcnn_arcface_euclidean():
+def test_ImageAnalyzer_mtcnn_arcface_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -391,7 +391,7 @@ def test_similarity_mtcnn_arcface_euclidean():
     assert df["Video1_Perpetrator"][5] == 5.9396
 
 
-def test_similarity_mtcnn_dlib_euclidean():
+def test_ImageAnalyzer_mtcnn_dlib_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -414,7 +414,7 @@ def test_similarity_mtcnn_dlib_euclidean():
     assert df["Video1_Perpetrator"][5] == 0.6575
 
 
-def test_similarity_mtcnn_sface_euclidean():
+def test_ImageAnalyzer_mtcnn_sface_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
@@ -437,7 +437,7 @@ def test_similarity_mtcnn_sface_euclidean():
     assert df["Video1_Perpetrator"][5] == 11.6240
 
 
-def test_similarity_mtcnn_ghostfacenet_euclidean():
+def test_ImageAnalyzer_mtcnn_ghostfacenet_euclidean():
     WH_column_images = ImageLoader("./data/01_Georgia_State_Video1/Video1_Perpetrator.png")
     WH_row_images = ImageLoader("./data/01_Georgia_State_Video1/*Mugshot*")
 
