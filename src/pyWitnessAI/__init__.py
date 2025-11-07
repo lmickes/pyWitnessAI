@@ -2,8 +2,12 @@ from .Constants import *
 from .Photo import *
 from .PhotoAnalyzer import *
 
-
 from .Video import *
+from .VideoAnalyzer import *
+from .VideoProcessor import *
+
+from .Lineup import *
+
 from .Test import *
 from .LineupDecider import *
 from .LineupPipeline import *
