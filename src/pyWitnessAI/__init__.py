@@ -3,7 +3,7 @@ from .Photo import *
 from .PhotoAnalyzer import *
 
 
-from .VideoAnalyzer import *
+from .Video import *
 from .Test import *
 from .LineupDecider import *
 from .LineupPipeline import *
