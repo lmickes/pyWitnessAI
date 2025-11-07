@@ -2,8 +2,8 @@ import cv2 as cv
 from typing import List, Optional, Literal
 from dataclasses import dataclass
 
-from .ImageAnalyzer import *
-from .LineupLoader import LineupLoader
+from .PhotoAnalyzer import *
+from .Lineup import LineupLoader
 from .LineupIdentifier import LineupIdentifier
 
 

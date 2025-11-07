@@ -1,6 +1,6 @@
 from .Constants import *
-from .ImageLoader import *
-from .ImageAnalyzer import *
+from .Photo import *
+from .PhotoAnalyzer import *
 
 
 from .VideoAnalyzer import *

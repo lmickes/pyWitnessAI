@@ -11,7 +11,7 @@ import torch
 from PIL import Image
 import glob
 from typing import Dict, Iterable, Tuple
-from .ImageLoader import ImageLoader
+from .Photo import ImageLoader
 
 class ImageAnalyzer:
     def __init__(
