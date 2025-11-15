@@ -11,13 +11,13 @@ import torch
 from PIL import Image
 import glob
 from typing import Dict, Iterable, Tuple
-from .ImageLoader import ImageLoader
+from .Images import Images
 
-class ImageAnalyzer:
+class ImagesAI:
     def __init__(
         self,
-        column_images: ImageLoader,
-        row_images: ImageLoader,
+        column_images: Images,
+        row_images: Images,
         distance_metric: str = "euclidean",
         backend: str = "opencv",
         enforce_detection: bool = False,

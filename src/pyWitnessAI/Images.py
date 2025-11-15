@@ -10,7 +10,7 @@ import glob
 from typing import Dict, Iterable, Tuple
 
 
-class ImageLoader:
+class Images:
     def __init__(self, images):
         """
         Initialize with:

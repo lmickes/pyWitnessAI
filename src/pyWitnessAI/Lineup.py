@@ -15,7 +15,7 @@ from typing import List, Optional, Dict, Literal, Tuple
 #     ]
 # )
 
-class LineupLoader:
+class Lineup:
     def __init__(self, folder_path: str, guilty_suspect: Optional[str] = None, innocent_suspect: Optional[str] = None):
         self.folder_path = folder_path
         self.guilty_suspect = guilty_suspect
