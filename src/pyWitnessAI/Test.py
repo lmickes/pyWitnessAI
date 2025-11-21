@@ -1,4 +1,4 @@
-from .VideoAnalyzer import *
+from .Video import *
 
 
 def exclude_test():
